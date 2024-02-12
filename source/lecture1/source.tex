@@ -35,7 +35,7 @@
 }
 \makeatother
 
-\title{Фотореалистичный рендеринг \textit{(aka raytracing)}}
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
 \subtitle{Лекция 1: Введение в курс. Метод трассировки лучей. Пересечение луча с геометрическими примитивами.}
 \date{2024}
 
@@ -796,6 +796,17 @@ D = X\cdot\operatorname{right}+Y\cdot\operatorname{up}+Z\cdot\operatorname{forwa
 \end{frame}
 
 \begin{frame}
+\frametitle{Вычисление луча из камеры: aspect ratio}
+\begin{itemize}
+\item Отношение ширины к высоте \begin{math}W / H\end{math} изображения называется \textit{aspect ratio}
+\pause
+\item Чтобы изображение получилось без искажений, нужно, чтобы это отношение совпадало с \begin{math}\tan\left({fov_X\over 2}\right) / \tan\left({fov_Y\over 2}\right)\end{math}
+\pause
+\item В формате сцены мы будем задавать только \begin{math}fov_X\end{math}, а \begin{math}fov_Y\end{math} вычислять на основе остальных значений
+\end{itemize}
+\end{frame}
+
+\begin{frame}
 \frametitle{Вычисление пересечения луча и объектов}
 \begin{itemize}
 \item Как вычислить пересечение луча и объекта сцены? \pause Зависит от \textit{геометрии} объекта
@@ -1040,6 +1051,8 @@ X \mapsto (V, W) \cdot (X, 0) \cdot (-V, W)
 \item Большинство форматов изображений довольно сложны для того, чтобы вручную их записывать, -- для этого нужны сторонние библиотеки
 \pause
 \item Есть формат NetPBM (\texttt{.pbm/.pgm/.ppm}), ориентированный на простоту чтения и записи
+\pause
+\item Его поддерживают многие редакторы, и большинство просмотрщиков изображений
 \pause
 \item Мы будем использовать бинарную версию формата PPM (P6, его описание есть в слайдах практики)
 \end{itemize}
