@@ -1,0 +1,1076 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг \textit{(aka raytracing)}}
+\subtitle{Лекция 1: Введение в курс. Метод трассировки лучей. Пересечение луча с геометрическими примитивами.}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{}
+\begin{itemize}
+\item Лисица Никита Игоревич (Яндекс)
+\item \texttt{lisyarus@gmail.com}
+\item \texttt{+7 (952) 276-70-50}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Как устроен курс}
+\begin{itemize}
+\item \textbf{Лекции}
+\begin{itemize}
+\item Слайды в репозитории \href{https://github.com/lisyarus/raytracing-course-slides/tree/master/pdf}{\texttt{github.com/lisyarus/raytracing-course-slides/tree/master/pdf}}
+\end{itemize}
+\pause
+\item \textbf{Практики}
+\pause
+\begin{itemize}
+\item Слайды с заданиями в репозитории \href{https://github.com/lisyarus/raytracing-course-slides/tree/master/pdf}{\texttt{github.com/lisyarus/raytracing-course-slides/tree/master/pdf}}
+\pause
+\item Каждая практика -- одно большое задание
+\pause
+\item Сдача автотестированием + код-ревью
+\pause
+\item Каждая практика основывается на коде \textit{предыдущей практики}!
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Баллы}
+\begin{itemize}
+\pause
+\item \textbf{Все баллы} получаются за практические задания
+\pause
+\begin{itemize}
+\item \textbf{до 9 баллов} -- 1ая практика
+\item \textbf{до 10 баллов} -- 2ая практика
+\item \begin{math}\dots\end{math}
+\item \textbf{до 16 баллов} -- 8ая практика
+\end{itemize}
+\pause
+\item В сумме -- \textbf{100 баллов}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Баллы}
+\begin{itemize}
+\item Дедлайн для практик -- 1 неделя, т.е. 23:59 следующего понедельника
+\pause
+\begin{itemize}
+\item На 1ую практику дедлайн -- 3 недели
+\item На 2ую практику дедлайн -- 2 недели
+\end{itemize}
+\pause
+\item При сдаче после дедлайна баллы делятся \textbf{пополам} (с округлением в большую сторону)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Оценка за курс}
+\pause
+\begin{itemize}
+\item Зачет: \textbf{50 и более} баллов
+\pause
+\item Экзамен:
+\begin{itemize}
+\item \textbf{50-59} баллов: \textbf{E}
+\item \textbf{60-69} баллов: \textbf{D}
+\item \textbf{70-79} баллов: \textbf{C}
+\item \textbf{80-89} баллов: \textbf{B}
+\item \textbf{90-100} баллов: \textbf{A}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Автотестирование}
+\begin{itemize}
+\item Каждая практика -- программа, по описанию входной сцены генерирующая картинку (\textit{`рендер'})
+\pause
+\item Автотестированием занимается телеграм-бот \texttt{mkn-raytracing-2024-bot}
+\pause
+\item Он запускает вашу программу на 5 \textit{случайных} сценах и сравнивает картинку с референсом
+\pause
+\item Баллы вычисляются на основе \textit{худшего} процента совпадения вашей картинки и картинки-референса
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Автотестирование}
+\begin{itemize}
+\item Можно использовать \textit{любой язык программирования} (если он не поддерживается -- напишите мне, я постараюсь его добавить)
+\pause
+\item \alert{\textbf{N.B.}}: Наши программы будут довольно медленными, так что лучше выбрать язык пошустрее
+\pause
+\item Нам нужно будет
+\begin{itemize}
+\item Читать и писать в текстовые и бинарные файлы
+\pause
+\item Работать с векторами и матрицами, -- можно взять готовую библиотеку (напр. \texttt{glm}), а можно написать все типы и операции самим (нам нужно совсем немного)
+\pause
+\item Генерировать случайные числа
+\pause
+\item Оперировать древовидными структурами данных
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Автотестирование}
+\begin{itemize}
+\item Боту нужно послать команду вида
+\usemintedstyle{solarized-light}
+\begin{minted}[bgcolor=lightbg]{bash}
+/submit practice1 github.com/ivanov_vanya/practice1.git
+  [ path-inside-repo ]
+\end{minted}
+\pause
+\item Можно делать все задания в одном репозитории или в разных, как хотите
+\pause
+\item В репозитории по указанному пути должны быть скрипты \texttt{build.sh} и \texttt{run.sh}:
+\begin{itemize}
+\item \texttt{build.sh} запускается один раз для сборки проекта
+\item \texttt{run.sh} запускается для каждого теста, он должен принимать пути до входного и выходного файла
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Автотестирование}
+Пример для проекта на C++ и CMake:
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item \texttt{build.sh}
+\begin{minted}[bgcolor=lightbg]{bash}
+#!/usr/bin/env bash
+
+mkdir build
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+\end{minted}
+\item \texttt{run.sh}
+\begin{minted}[bgcolor=lightbg]{bash}
+#!/usr/bin/env bash
+
+./build/solution "$1" "$2"
+\end{minted}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пререквезиты}
+\pause
+\begin{itemize}
+\item \textbf{Программирование}
+\pause
+\begin{itemize}
+\item Основы программирования -- циклы, массивы, функции, структуры, и т.п.
+\pause
+\item Какой-нибудь язык программирования
+\pause
+\item Компилировать и запускать программы в удобной вам среде
+\end{itemize}
+\pause
+\item \textbf{Математика}
+\pause
+\begin{itemize}
+\item Линейная алгебра (векторы, матрицы, умножение матриц, линейные системы, ортогональность)
+\pause
+\item Аналитическая геометрия (координаты, уравнения кривых и поверхностей)
+\pause
+\item Анализ (производные, интегралы, трансцендентные функции)
+\pause
+\item Основы статистики
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1-2>[label=stages]
+\frametitle{Примерный план курса}
+\pause
+\begin{itemize}
+\item \textbf{Лекции 1-3: Whitted-style raytracing}
+\begin{itemize}
+\item Трассировка лучей без решения уравнения рендеринга
+\end{itemize}
+\pause
+\item \textbf{Лекции 4-6: Monte-Carlo pathtracing}
+\begin{itemize}
+\item Теория распространения света
+\item Модели материалов
+\item Решение уравнение рендеринга
+\item Оптимизация
+\end{itemize}
+\pause
+\item \textbf{Лекции 7-8: Красивые картинки}
+\begin{itemize}
+\item Формат сцен glTF
+\item Physically-based материалы
+\item Тестуры
+\item Material mapping
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Whitted-style raytracing (1979)}
+\begin{figure}
+\slideimage{stage1.jpg}
+\end{figure}
+\end{frame}
+
+\againframe<2-3>{stages}
+
+\begin{frame}
+\frametitle{Monte-Carlo pathtracing}
+\begin{figure}
+\slideimage{stage2.jpg}
+\end{figure}
+\end{frame}
+
+\againframe<3-4>{stages}
+
+\begin{frame}
+\frametitle{Красивые картинки}
+\begin{figure}
+\slideimage{stage3.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}<1-2>[label=what_is]
+\frametitle{Что такое компьютерная графика?}
+\begin{itemize}
+\pause % 1
+\item Кинематограф, мультипликация
+\pause % 2
+\item Компьютерные игры
+\pause % 3
+\item Рисунки, concept art
+\pause % 4
+\item Графический интерфейс
+\pause % 5
+\item Визуализация данных
+\pause % 6
+\item Научная визуализация
+\pause % 7
+\item Карты
+\pause % 8
+\item И т.д.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{The Matrix Revolutions (2003)}
+\begin{figure}
+\slideimage{matrix.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Avatar (2009)}
+\begin{figure}
+\slideimage{avatar.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{The Avengers (2012)}
+\begin{figure}
+\slideimage{avengers.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Klaus (2019)}
+\begin{figure}
+\slideimage{klaus.jpg}
+\end{figure}
+\end{frame}
+
+\againframe<3>{what_is}
+
+\begin{frame}
+\frametitle{Space Invaders (1978)}
+\begin{figure}
+\slideimage{space-invaders.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Doom (1993)}
+\begin{figure}
+\slideimage{doom.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Grand Theft Auto: Vice City (2002)}
+\begin{figure}
+\slideimage{vice-city.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Civilization V (2010)}
+\begin{figure}
+\slideimage{civ-5.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{The Witcher 3: Wild Hunt (2015)}
+\begin{figure}
+\slideimage{witcher.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cyberpunk 2077 (2020)}
+\begin{figure}
+\slideimage{cyberpunk.jpg}
+\end{figure}
+\end{frame}
+
+\againframe<4>{what_is}
+
+\begin{frame}
+\begin{figure}
+\slideimage{night.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\begin{figure}
+\slideimage{tunnel.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\begin{figure}
+\slideimage{forest.jpg}
+\end{figure}
+\end{frame}
+
+\againframe<5>{what_is}
+
+\begin{frame}
+\frametitle{Mac OS Catalina}
+\begin{figure}
+\slideimage{macos.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Windows 10}
+\begin{figure}
+\slideimage{windows.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Europa Universalis 4}
+\begin{figure}
+\slideimage{eu4.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Dear ImGui}
+\begin{figure}
+\slideimage{imgui.png}
+\end{figure}
+\end{frame}
+
+\againframe<6>{what_is}
+
+\begin{frame}
+\frametitle{Популярность браузеров в 2002-2009}
+\begin{figure}
+\slideimage{browsers.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Карта землетрясений}
+\begin{figure}
+\slideimage{earthquakes.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Количество случаев заражения COVID-19}
+\begin{figure}
+\slideimage{covid.png}
+\end{figure}
+\end{frame}
+
+\againframe<7>{what_is}
+
+\begin{frame}
+\frametitle{Неустойчивость Рэлея — Тейлора}
+\begin{figure}
+\slideimage{fluids.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Молекулярные орбитали бензола}
+\begin{figure}
+\slideimage{benzene.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Симуляция напряжений в стенте методом конечных элементов}
+\begin{figure}
+\slideimage{stent.jpg}
+\end{figure}
+\end{frame}
+
+\againframe<8>{what_is}
+
+\begin{frame}
+\frametitle{Схематическая карта}
+\begin{figure}
+\slideimage{map.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Спутниковая карта}
+\begin{figure}
+\slideimage{satellite.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Карта погоды}
+\begin{figure}
+\slideimage{weather.png}
+\end{figure}
+\end{frame}
+
+\againframe<9>{what_is}
+
+\begin{frame}<1-2>[label=classification]
+\frametitle{Грубая и неточная классификация}
+\pause
+\begin{itemize}
+\item \only<2>{2D / 3D} \pause \only<3->{2D / 2.5D / 3D}
+\pause
+\item Векторная / растровая
+\pause
+\item \only<5>{Realtime / offline} \pause \only<6->{Realtime / near real-time / offline}
+\pause
+\item Фотореалистичная / стилизованная
+\pause
+\item CPU / GPU
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Super Mario Bros. (1983) - 2D}
+\begin{figure}
+\slideimage{mario.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Red Dead Redemption 2 (2018) - 3D}
+\begin{figure}
+\slideimage{rdr2.jpg}
+\end{figure}
+\end{frame}
+
+\againframe<2-3>{classification}
+
+\begin{frame}
+\frametitle{Civilization III (2001) - 2.5D}
+\begin{figure}
+\slideimage{civ3.png}
+\end{figure}
+\end{frame}
+
+\againframe<3-4>{classification}
+
+\begin{frame}
+\frametitle{Векторная графика}
+\begin{figure}
+\slideimage{vector.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Растровая графика}
+\begin{figure}
+\slideimage{raster.png}
+\end{figure}
+\end{frame}
+
+\againframe<4->{classification}
+
+\begin{frame}
+\frametitle{Чем мы будем заниматься?}
+\begin{itemize}
+\item \only<-1>{2D / 2.5D / 3D}\only<2->{{2D / 2.5D / \alert{\textbf{\underline{3D}}}}}
+\item \only<-2>{Векторная / растровая}\only<3->{{\alert{\textbf{\underline{Векторная / растровая}}}}}
+\item Realtime / near real-time / \only<-3>{offline}\only<4->{{\alert{\textbf{\underline{offline}}}}}
+\item \only<-4>{Фотореалистичная}\only<5->{{\alert{\textbf{\underline{Фотореалистичная}}}}} / стилизованная
+\item \only<-5>{CPU}\only<6->{{\alert{\textbf{\underline{CPU}}}}} / GPU
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Где это пригодится?}
+\begin{itemize}
+\pause
+\item Разработка \textit{профессиональных движков фотореалистичного рендеринга}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Чем мы \underline{не} будем заниматься?}
+\begin{itemize}
+\pause
+\item \textbf{Учиться рисовать / моделировать и анимировать объекты / etc.}
+\pause
+\begin{itemize}
+\item Красивая картинка -- движок + данные (текстуры, модели, частицы, etc, -- \textit{assets})
+\item Курс про \alert{\textbf{\underline{\textit{движок}}}}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Два способа рендеринга}
+\begin{itemize}
+\item \textit{Рендеринг} -- генерация изображения по входной сцене
+\pause
+\item Первый способ: \textit{растеризация}
+\pause
+\begin{itemize}
+\item Разобьём сцену на максимально простые куски (треугольники)
+\item Вычислим, в какие пиксели на экране попал каждый треугольник
+\item Сделаем тонну трюков, чтобы обработать наложение объектов, освещение, и т.д.
+\item {\color{green}\texttt{+}} Очень быстро работает
+\item {\color{green}\texttt{+}} Требует только простейших операций
+\item {\color{green}\texttt{+}} Хорошо ложится на GPU
+\item {\color{red}\texttt{-}} Очень сложно реализовать нетривиальные эффекты
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Два способа рендеринга}
+\begin{itemize}
+\item Второй способ: \textit{трассировка лучей/путей}
+\pause
+\begin{itemize}
+\item Разобьём сцену на объекты
+\item Для каждого пикселя построим луч из камеры в этот пиксель
+\item Вычислим, что пересёк этот луч
+\item {\color{red}\texttt{-}} Работает медленнее из-за поиска пересечений
+\item {\color{red}\texttt{-}} Плохо ложится на GPU из-за необходимости передачи сложных структур данных
+\item {\color{green}\texttt{+}} С помощью дополнительных лучей легко реализовать почти любые эффекты, связанные с распространением света
+\end{itemize}
+\pause
+\item Это то, чем мы будем заниматься
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Трассировка лучей}
+Общий план рисования сцены трассировкой лучей:
+\pause
+\begin{itemize}
+\item 1. Описать сцену: форму объектов и их материал (напр. цвет)
+\pause
+\item 2. Описать камеру: где она находится, куда смотрит
+\pause
+\item 3. Задать размеры изображения
+\pause
+\item 4. Для каждого пикселя изображения, построить луч из камеры в этот пиксель
+\pause
+\item 5. Найти ближайшее пересечение луча с объектами сцены
+\pause
+\item 6. В качестве цвета пикселя взять цвет объекта пересечения
+\pause
+\item 7. Сохранить полученную картинку
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Описание сцены}
+\begin{itemize}
+\item Поначалу мы будем использовать максимально простой формат сцен, описанный в слайдах практики
+\pause
+\item Ближе к концу курса перейдём к более серьёзному формату, скорее всего -- \texttt{glTF}
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1>[label=camera]
+\frametitle{Описание камеры}
+\begin{itemize}
+\item Обычно в компьютерной графике используют два типа камеры (\textit{проекции}): \textit{ортографическую} и \textit{перспективную}
+\pause
+\item Мы будем использовать \textit{перспективную} камеру
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Ортографическая камера}
+\begin{figure}
+\slideimage{orthographic.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Перспективная камера}
+\begin{figure}
+\slideimage{perspective.png}
+\end{figure}
+\end{frame}
+
+\againframe<1->{camera}
+
+\begin{frame}[fragile]
+\frametitle{Перспективная проекция}
+\begin{itemize}
+\item Есть {\color{blue}центр проекции} и {\color{blue}плоскость проекции}
+\item \only<1>{\phantom{Проекция точки -- пересечение прямой, проходящей через эту точку и центр проекции, с плоскостью проекции}} \only<2->{{\color{red}Проекция} {\color{green}точки} -- пересечение {\color{magenta}прямой}, проходящей через эту {\color{green}точку} и {\color{blue}центр проекции}, с {\color{blue}плоскостью проекции}}
+\end{itemize}
+\begin{center}
+\begin{tikzpicture}
+\only<1->{
+  \draw[blue,thick] (2.0, -2.0) -- (2.0, 2.0);
+  \node[circle,draw=blue,fill=blue] at (0.0, 0.0) {};
+}
+\only<1->{
+  \phantom{
+    \draw[magenta,thick,dashed] (0.0, 0.0) -- (6.0, 1.5);
+    \node[circle,draw=red,fill=red] at (2.0, 0.5) {};
+    \node[circle,draw=green,fill=green] at (6.0, 1.5) {};
+  }
+}
+\only<2->{
+  \draw[magenta,thick,dashed] (0.0, 0.0) -- (6.0, 1.5);
+  \node[circle,draw=red,fill=red] at (2.0, 0.5) {};
+  \node[circle,draw=green,fill=green] at (6.0, 1.5) {};
+}
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{Описание камеры}
+\begin{itemize}
+\item Позиция камеры: точка, из которой камера смотрит
+\pause
+\item Оси камеры (вперёд, вправо, вверх): векторы, задающие ориентацию камеры
+\pause
+\begin{itemize}
+\item \alert{\textbf{N.B.}} Будем считать, что оси в таком порядке задают \textit{правую} систему координат
+\end{itemize}
+\pause
+\item Угол обзора камеры по ширине и высоте (\textit{FOV -- field of view})
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Углы обзора камеры}
+\begin{figure}
+\slideimage{fov.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Углы обзора камеры}
+\begin{itemize}
+\item Угол обзора по ширине \begin{math}fov_X\end{math} -- угол между левой и правой границами видимой области
+\pause
+\item Угол обзора по высоте \begin{math}fov_Y\end{math} -- угол между верхней и нижней границами видимой области
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление луча из камеры}
+\begin{itemize}
+\item Хотим вычислить луч из камеры в пиксель с (целыми) координатами \begin{math}(P_X, P_Y)\end{math}
+\pause
+\item Луч задаётся началом и направлением
+\pause
+\item Начало луча \begin{math}O\end{math} это позиция камеры
+\pause
+\item Направление луча рассчитывается из координат пикселя, углов обзора камеры и её ориентации
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление луча из камеры}
+\begin{itemize}
+\item Игнорируя ориентацию камеры, представим, что она находится в начале координат и её оси совпадают с осями координат (камера смотрит в направлении оси Z)
+\pause
+\item Возьмём плоскость \begin{math}Z=1\end{math} -- какие точки этой плоскости видны камерой?
+\pause
+\item Точка \begin{math}(X, Y, 1)\end{math} видна, если \begin{math}|X| < \tan\left({fov_X\over 2}\right)\end{math} и \begin{math}|Y| < \tan\left({fov_Y\over 2}\right)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление луча из камеры}
+\begin{itemize}
+\item Значит, нам нужно перевести диапазон пиксельных координат в координаты точек на плоскости \begin{math}Z=1\end{math}:
+\begin{itemize}
+\item По X: \begin{math}[0, W]\rightarrow\left[-\tan\left({fov_X\over 2}\right), \tan\left({fov_X\over 2}\right)\right]\end{math}
+\item По Y: \begin{math}[0, H]\rightarrow\left[-\tan\left({fov_Y\over 2}\right), \tan\left({fov_Y\over 2}\right)\right]\end{math}
+\end{itemize}
+\pause
+\item Это делается формулами
+\begin{itemize}
+\item \begin{math}P_X \mapsto \left(2 \frac{P_X}{W} - 1\right) \cdot \tan\left({fov_X\over 2}\right)\end{math}
+\item \begin{math}P_Y \mapsto \left(2 \frac{P_Y}{H} - 1\right) \cdot \tan\left({fov_Y\over 2}\right)\end{math}
+\end{itemize}
+\pause
+\item \alert{\textbf{N.B.:}} Вместо точки \begin{math}(P_X, P_Y)\end{math}, соответствующей углу пикселя, лучше брать его центр \begin{math}(P_X + 0.5, P_Y + 0.5)\end{math}
+\item \alert{\textbf{N.B.:}} Обычно форматы изображений хранят пиксели сверху-вниз, и картинка получится перевёрнутой; проще всего это исправить, домножив формулу для Y на -1
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление луча из камеры}
+\begin{itemize}
+\item Итак, по координатам пикселя \begin{math}(P_X, P_Y)\end{math} мы нашли вектор направления \begin{math}(X, Y, Z)\end{math} с \begin{math}Z=1\end{math}
+\pause
+\item Как его перевести в систему координат матрицы? \pause Взять линейную комбинацию осей матрицы с этими коэффициентами:
+\begin{equation}
+D = X\cdot\operatorname{right}+Y\cdot\operatorname{up}+Z\cdot\operatorname{forward}
+\end{equation}
+\pause
+\item Это и есть финальный вектор направления для нашего луча
+\pause
+\item \alert{\textbf{N.B.:}} Обычно вектор направления считают нормированным -- это упрощает некоторые вычисления, но может усложнить другие; вы можете сделать так, как вам кажется удобнее
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и объектов}
+\begin{itemize}
+\item Как вычислить пересечение луча и объекта сцены? \pause Зависит от \textit{геометрии} объекта
+\pause
+\item Точки \begin{math}P = (X,Y,Z)\end{math} луча удобно параметризовать параметром \begin{math}t \in [0, \infty)\end{math} как \begin{math}P = O + t \cdot D\end{math}
+\pause
+\item Позже мы будем использовать настоящие трёхмерные модели из треугольников, а пока ограничимся простыми геометрическими фигурами: плоскостью, эллипсоидом, параллелепипедом
+\pause
+\item \alert{\textbf{N.B.:}} Пока будем считать, что все объекты находятся в начале координат
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и плоскости}
+\begin{itemize}
+\item Плоскость удобно описывать вектором нормали и точкой, через которую проходит плоскость
+\pause
+\item Мы договорились, что все объекты находятся в начале координат, так что нам достаточно вектора нормали \begin{math}N = (N_X, N_Y, N_Z)\end{math}
+\pause
+\item Уравнение такой плоскости: \begin{math}P\cdot N = X\cdot N_X+Y\cdot N_Y+Z\cdot N_Z=0\end{math}
+\pause
+\item Подставляем формулу для точки на луче, и получаем \begin{math}O \cdot N + t \cdot D \cdot N = 0\end{math}, или \begin{math}t = -\frac{O \cdot N}{D \cdot N}\end{math}
+\pause
+\item Если \begin{math}t<0\end{math}, плоскость не видна в этом пикселе, иначе -- видна
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и сферы}
+\begin{itemize}
+\item Сфера описывается радиусом \begin{math}R\end{math} и уравнением
+\begin{equation}
+X^2+Y^2+Z^2=P\cdot P = R^2
+\end{equation}
+\pause
+\item Подставляем формулу точки луча, и получаем
+\begin{equation}
+O\cdot O + 2t (O\cdot D) + t^2 (D\cdot D) = R^2
+\end{equation}
+\pause
+\item Это квадратное уравнение, у него может быть до двух решений:
+\pause
+\begin{itemize}
+\item Если решений нет, луч не пересекает сферу
+\item Если решение одно, луч касается сферы
+\item Если решений два, луч пересекает сферу в двух точках и проходит через её внутренность
+\end{itemize}
+\pause
+\item Нам нет нужды различать случаи одного и двух решений -- будем считать, что их всегда два
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и сферы}
+\begin{itemize}
+\item Пусть \begin{math}t_1 < t_2\end{math} -- два решения квадратного уравнения
+\pause
+\item Могут произойти три вещи:
+\pause
+\begin{itemize}
+\item \begin{math}0 < t_1\end{math} -- камера находится снаружи сферы, \begin{math}t_1\end{math} -- ближайшее пересечение
+\pause
+\item \begin{math}t_1 < 0 < t_2\end{math} -- камера находится внутри сферы, \begin{math}t_1\end{math} -- точка сзади камеры, \begin{math}t_2\end{math} -- ближайшее видимое пересечение
+\pause
+\item \begin{math}t_2 < 0\end{math} -- камера находится снаружи сферы, \begin{math}t_2\end{math} -- точка сзади камеры, нет видимого пересечения
+\end{itemize}
+\pause
+\item То есть среди значений \begin{math}t_1, t_2\end{math} нас интересует минимальное, меньшее нуля; если таких нет, то сфера не видна этим лучом
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и эллипсоида}
+\begin{itemize}
+\item Эллипсоид описывается тремя радиусами \begin{math}R=(R_X, R_Y, R_Z)\end{math} и уравнением
+\begin{equation}
+\frac{X^2}{R_X^2} + \frac{Y^2}{R_Y^2} + \frac{Z^2}{R_Z^2} = \frac{P}{R}\cdot \frac{P}{R} = 1
+\end{equation}
+\pause
+\item Здесь, \begin{math}\frac{P}{R}\end{math} -- \textit{покомпонентное} деление векторов
+\pause
+\item Подставляем формулу точки луча, и получаем
+\begin{equation}
+\frac{O}{R}\cdot \frac{O}{R} + 2t \left(\frac{O}{R}\cdot \frac{D}{R}\right) + t^2 \left(\frac{D}{R}\cdot \frac{D}{R}\right) = 1
+\end{equation}
+\pause
+\item Это квадратное уравнение, дальше всё аналогично ситуации со сферой
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и параллелепипеда}
+\begin{itemize}
+\item Считая, что центр параллелепипеда находится в центре координат, удобно его описать размерами по трём осям \begin{math}S=(S_X, S_Y, S_Z)\end{math} и уравнениями внутренности
+\begin{equation}
+|X| < S_X
+\end{equation}
+\begin{equation}
+|Y| < S_Y
+\end{equation}
+\begin{equation}
+|Z| < S_Z
+\end{equation}
+\pause
+\item Удобно представить параллелепипед как пересечение трёх бесконечных множеств \begin{math}|X| < S_X\end{math}, \begin{math}|Y| < S_Y\end{math} и \begin{math}|Z| < S_Z\end{math}
+\pause
+\item Подставляем формулу точки луча в уравнение границы по X: \begin{math}X = \pm S_X\end{math} и получаем
+\begin{equation}
+(O+t\cdot D)_X = \pm S_X \Longrightarrow t = \frac{\pm S_X - O_X}{D_X}
+\end{equation}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и параллелепипеда}
+\begin{itemize}
+\item Пусть \begin{math}t_{1,X} < t_{2,X}\end{math} -- значения, полученные по формуле с предыдущего слайда
+\pause
+\item Аналогично \begin{math}t_{1,Y} < t_{2,Y}\end{math} и \begin{math}t_{1,Z} < t_{2,Z}\end{math}
+\pause
+\item Мы получили три диапазона значений \begin{math}t\end{math}, нас интересует их пересечение:
+\begin{equation}
+t_1 = \max(t_{1,X}, t_{1,Y}, t_{1,Z})
+\end{equation}
+\begin{equation}
+t_2 = \min(t_{2,X}, t_{2,Y}, t_{2,Z})
+\end{equation}
+\pause
+\item Если \begin{math}t_1 > t_2\end{math}, то пересечения нет
+\pause
+\item Иначе -- аналогично сфере, сравниваем значения с нулём
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и сдвинутого объекта}
+\begin{itemize}
+\item Что, если объект находится не в начале координат, а в точке \begin{math}T\end{math}?
+\pause
+\item Переместим на вектор \begin{math}-T\end{math} и объект, и луч, т.е вычтем \begin{math}T\end{math} из точки начала луча  (объект переместим только мысленно)
+\pause
+\item Теперь объект в начале координат \begin{math}\Longrightarrow\end{math} используем описанные ранее алгоритмы
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и повёрнутого объекта}
+\begin{itemize}
+\item Что, если объект не параллелен осям координат, а повёрнут?
+\pause
+\item Есть разные способы описания вращений: матрицы, углы Эйлера, кватернионы
+\pause
+\item Мы будем использовать кватернионы
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Кватернионы \begin{math}\mathbb{H}\end{math}: TL;DR}
+\begin{itemize}
+\item \begin{math}\mathbb{H}\end{math} -- четырёхмерная алгебра над вещественными числами \begin{math}\mathbb{R}\end{math}, т.е. описываются четыремя координатами \begin{math}(X,Y,Z,W)\end{math}
+\pause
+\item Можно складывать, умножать, делить (умножение не коммутативно)
+\pause
+\item Любое вращение трёхмерного пространства описывается двумя противоположными (\begin{math}Q_1 = -Q_2\end{math}) единичными (\begin{math}X^2+Y^2+Z^2+W^2=1\end{math}) кватернионами
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Кватернионы \begin{math}\mathbb{H}\end{math}: TL;DR}
+\begin{itemize}
+\item Кватернион \begin{math}(X,Y,Z,W)\end{math} удобно разбить на скалярную \begin{math}W\end{math} и векторную \begin{math}V = (X, Y, Z)\end{math} части
+\pause
+\item Умножение кватернионов в такой форме:
+\begin{equation}
+(V_1,W_1)\cdot(V_2,W_2) = (W_1\cdot V_2 + W_2\cdot V_1 + V_1\times V_2, W_1\cdot W_2 - V_1\cdot V_2)
+\end{equation}
+\pause
+\item Сопряжённый кватернион:
+\begin{equation}
+\overline{(V,W)} = (-V, W)
+\end{equation}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Кватернионы и вращения}
+\begin{itemize}
+\item Любой единичный кватернион \begin{math}(V,W)\end{math} определяет вращение вектора \begin{math}X\end{math} по формуле
+\begin{equation}
+X \mapsto (V, W) \cdot (X, 0) \cdot (-V, W)
+\end{equation}
+\pause
+\item Вращение на угол \begin{math}\theta\end{math} вокруг вектора \begin{math}V\end{math} задаёт кватернион
+\begin{equation}
+(\sin\theta \cdot V, \cos\theta)
+\end{equation}
+\pause
+\item Сопряжённый кватернион описывает обратное вращение
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и повёрнутого объекта}
+\begin{itemize}
+\item Что, если объект не параллелен осям координат, а повёрнут на кватернион \begin{math}Q\end{math}?
+\pause
+\item Повернём и объект, и вектор направления луча на сопряжённый кватернион \begin{math}\overline{Q}\end{math} (объект -- только мысленно)
+\pause
+\item Теперь объект параллелен осям координат \begin{math}\Longrightarrow\end{math} используем описанные ранее алгоритмы
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и произвольного объекта}
+\begin{itemize}
+\item Что, если объект и повёрнут, и сдвинут?
+\pause
+\item Вычтем \begin{math}T\end{math} из точки начала луча
+\pause
+\item Повернём вектор направления луча на сопряжённый кватернион \begin{math}\overline{Q}\end{math}
+\pause
+\item Используем описанные ранее алгоритмы
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Вычисление пересечения луча и сцены}
+\begin{itemize}
+\item Проходим по всем объектам сцены, находим пересечение луча с ними
+\pause
+\item Из всех объектов, пересекших луч, находим ближайшее к камере пересечение, т.е. с минимальным значением \begin{math}t\end{math}
+\pause
+\item Если было хотя бы одно пересечение, записываем в пиксель цвет ближайшего объекта
+\pause
+\item Если пересечений не было, записываем в пиксель цвет фона
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Сохранение изображения}
+\begin{itemize}
+\item Большинство форматов изображений довольно сложны для того, чтобы вручную их записывать, -- для этого нужны сторонние библиотеки
+\pause
+\item Есть формат NetPBM (\texttt{.pbm/.pgm/.ppm}), ориентированный на простоту чтения и записи
+\pause
+\item Мы будем использовать бинарную версию формата PPM (P6, его описание есть в слайдах практики)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Сохранение изображения}
+\begin{itemize}
+\item Для записи изображения в файл нам потребуется массив его пикселей
+\pause
+\usemintedstyle{solarized-light}
+\item Удобнее всего хранить пиксели как непрерывный массив байт (напр. \mintinline{cpp}|vector<uint8_t>| в C++), последовательно хранящий строки изображения
+\pause
+\item Пиксель -- три байта: его {\color{red}красный}, {\color{green}зелёный} и {\color{blue}синий} каналы, соответственно (в диапазоне [0..255])
+\pause
+\item Для доступа к i-ой компоненте пикселя (x,y) в непрерывном массиве можно использовать \mintinline{cpp}|pixels[(y * width + x) * 3 + i]|
+\pause
+\item Мы будем работать с цветами как с floating-point числами, как правило, в диапазоне [0..1]
+\pause
+\item После того, как цвет пикселя вычислен, его нужно будет сконвертировать в целое число [0..255]
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Литература, ссылки}
+\begin{itemize}
+\item Серия книжек \href{https://raytracing.github.io/}{\texttt{Raytracing In One Weekend}} -- очень хороший учебник начального уровня
+\item \href{https://www.gabrielgambetta.com/computer-graphics-from-scratch/}{\texttt{Computer Graphics from Scratch}} -- книжка начального уровня
+\item \href{https://www.pbr-book.org/}{\texttt{Physically Based Rendering: From Theory To Implementation}} -- книжка продвинутого уровня
+\item \href{https://www.realtimerendering.com/raytracing.html}{\texttt{realtimerendering.com/raytracing.html}} -- сборник ресурсов про рейтрейсинг
+\end{itemize}
+\end{frame}
+
+\end{document}
