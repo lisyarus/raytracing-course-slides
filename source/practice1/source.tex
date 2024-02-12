@@ -1,0 +1,182 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Практика 1}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Напоминание об автотестах}
+\begin{itemize}
+\item Каждая практика -- программа, по описанию входной сцены генерирующая картинку (\textit{`рендер'})
+\pause
+\item Автотестированием занимается телеграм-бот \texttt{mkn-raytracing-2024-bot}
+\pause
+\item Боту нужно послать команду вида
+\usemintedstyle{solarized-light}
+\begin{minted}[bgcolor=lightbg]{bash}
+/submit practice1 github.com/ivanov_vanya/practice1.git
+  [ path-inside-repo ]
+\end{minted}
+\pause
+\item В репозитории по указанному пути должны быть скрипты \texttt{build.sh} и \texttt{run.sh}
+\pause
+\item Скрипт \texttt{run.sh} запускается с двумя параметрами: путь до файла с описанием сцены, и путь до выходного файла с картинкой
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат сцены}
+\begin{itemize}
+\item Текстовый формат, простой для ручного парсинга
+\pause
+\item Каждая строка файла -- отдельная команда, задающая какие-то параметры сцены
+\pause
+\item Команды выглядят как \texttt{COMMAND\_NAME <arg1> <arg2> ...}, все аргументы -- вещественные числа
+\pause
+\item Неизвестные команды \textit{нужно пропускать}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат сцены: описание команд}
+\begin{itemize}
+\item \texttt{DIMENSIONS <width> <height>} -- размеры изображения, которое нужно сгенерировать
+\item \texttt{BG\_COLOR <red> <green> <blue>} -- цвет фона сцены (значения в диапазоне [0..1])
+\item \texttt{CAMERA\_POSITION <x> <y> <z>} -- координаты позиции камеры
+\item \texttt{CAMERA\_RIGHT <x> <y> <z>} -- ось `вправо' камеры
+\item \texttt{CAMERA\_UP <x> <y> <z>} -- ось `вверх' камеры
+\item \texttt{CAMERA\_FORWARD <x> <y> <z>} -- ось `вперёд' камеры
+\item \texttt{CAMERA\_FOV\_X <angle>} -- угол обзора камеры по ширине (в радианах)
+\item \alert{\textbf{N.B.:}} \begin{math}fov_Y\end{math} вычисляется на основе \begin{math}fov_X, width, height\end{math} (см. слайды лекции)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат сцены: описание команд}
+\begin{itemize}
+\item \texttt{NEW\_PRIMITIVE} -- добавить новый объект в список объектов сцены (дальнейшие команды описывают последний созданный объект)
+\item \texttt{PLANE <nx> <ny> <ny>} -- задать геометрию объекта -- плоскость с заданным вектором нормали
+\item \texttt{ELLIPSOID <rx> <ry> <ry>} -- задать геометрию объекта -- эллипсоид с заданными радиусами
+\item \texttt{BOX <sx> <sy> <sy>} -- задать геометрию объекта -- параллелепипед с заданными размерами (как в лекции)
+\item \texttt{POSITION <x> <y> <y>} -- координаты центра объекта, по умолчанию -- \begin{math}(0, 0, 0)\end{math}
+\item \texttt{ROTATION <x> <y> <y> <w>} -- кватернион вращения объекта, по умолчанию -- \begin{math}(0, 0, 0, 1)\end{math}
+\item \texttt{COLOR <red> <green> <blue>} -- цвет объекта
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены}
+\usemintedstyle{solarized-light}
+\begin{minted}[bgcolor=lightbg,fontsize=\scriptsize]{text}
+DIMENSIONS 640 480
+
+BG_COLOR 0 0 0.5
+
+CAMERA_POSITION 0 1.5 0
+CAMERA_RIGHT 1 0 0
+CAMERA_UP 0 1 0
+CAMERA_FORWARD 0 0 -1
+CAMERA_FOV_X 1.5708
+
+NEW_PRIMITIVE
+ELLIPSOID 2 2 2
+POSITION -1 1 -5
+COLOR 1 0 0
+
+NEW_PRIMITIVE
+PLANE 0 1 0
+COLOR 0 1 0
+
+NEW_PRIMITIVE
+BOX 0.5 0.5 0.5
+POSITION 1.5 2.5 -3
+ROTATION 0.31246 0.15623 0.15623 0.92388
+COLOR 1 1 0
+\end{minted}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены}
+\begin{figure}
+\slideimage{result.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат изображения}
+\begin{itemize}
+\item NetPBM P6: текстово-бинарный формат, удобный для чтения и записи
+\pause
+\item Имеет расширение файла \texttt{.ppm} (вам его дописывать не нужно)
+\pause
+\item Первая строка файла: \texttt{P6}
+\item Вторая строка файла: \texttt{<width> <height>} (нужно подставить ширину и высоту изображения)
+\item Третья строка файла: \texttt{255} (максимальное значение цветовых компонент, у нас всегда 255)
+\item После этого -- пиксели изображения в сыром, бинарном формате (всего \texttt{width * height * 3} байт)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Советы}
+\begin{itemize}
+\item Начните с парсинга, и реализуйте команды по одной
+\pause
+\item Удобно начать тестировать с камеры в центре координат и сферы, на которую смотрит камера (должен появиться кружок на экране)
+\pause
+\item Удобно разбить код на функции, например
+\usemintedstyle{solarized-light}
+\begin{minted}[bgcolor=lightbg]{cpp}
+ray generate_ray(camera, pixel_coord);
+optional<float> intersection(ray, plane);
+optional<float> intersection(ray, sphere);
+optional<float> intersection(ray, box);
+optional<float> intersection(ray, object);
+optional<pair<float, color>> intersection(ray, scene);
+color raytrace(scene, ray);
+image generate_image(scene);
+\end{minted}
+\end{itemize}
+\end{frame}
+
+\end{document}
