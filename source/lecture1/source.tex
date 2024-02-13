@@ -163,8 +163,8 @@
 \item Боту нужно послать команду вида
 \usemintedstyle{solarized-light}
 \begin{minted}[bgcolor=lightbg]{bash}
-/submit practice1 github.com/ivanov_vanya/practice1.git
-  [ path-inside-repo ]
+/submit practice1 https://github.com/vanya/practice1.git
+  [ path-inside-repo [ branch ] ]
 \end{minted}
 \pause
 \item Можно делать все задания в одном репозитории или в разных, как хотите
@@ -784,7 +784,7 @@ cmake --build .
 \begin{itemize}
 \item Итак, по координатам пикселя \begin{math}(P_X, P_Y)\end{math} мы нашли вектор направления \begin{math}(X, Y, Z)\end{math} с \begin{math}Z=1\end{math}
 \pause
-\item Как его перевести в систему координат матрицы? \pause Взять линейную комбинацию осей матрицы с этими коэффициентами:
+\item Как его перевести в систему координат камеры? \pause Взять линейную комбинацию осей камеры с этими коэффициентами:
 \begin{equation}
 D = X\cdot\operatorname{right}+Y\cdot\operatorname{up}+Z\cdot\operatorname{forward}
 \end{equation}
@@ -874,7 +874,7 @@ O\cdot O + 2t (O\cdot D) + t^2 (D\cdot D) = R^2
 \item \begin{math}t_2 < 0\end{math} -- камера находится снаружи сферы, \begin{math}t_2\end{math} -- точка сзади камеры, нет видимого пересечения
 \end{itemize}
 \pause
-\item То есть среди значений \begin{math}t_1, t_2\end{math} нас интересует минимальное, меньшее нуля; если таких нет, то сфера не видна этим лучом
+\item То есть среди значений \begin{math}t_1, t_2\end{math} нас интересует минимальное, большее нуля; если таких нет, то сфера не видна этим лучом
 \end{itemize}
 \end{frame}
 
@@ -1001,7 +1001,7 @@ X \mapsto (V, W) \cdot (X, 0) \cdot (-V, W)
 \pause
 \item Вращение на угол \begin{math}\theta\end{math} вокруг вектора \begin{math}V\end{math} задаёт кватернион
 \begin{equation}
-(\sin\theta \cdot V, \cos\theta)
+\left(\sin{\theta\over 2} \cdot V, \cos{\theta\over 2}\right)
 \end{equation}
 \pause
 \item Сопряжённый кватернион описывает обратное вращение
