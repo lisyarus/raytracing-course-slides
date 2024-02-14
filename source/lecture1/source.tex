@@ -1024,11 +1024,19 @@ X \mapsto (V, W) \cdot (X, 0) \cdot (-V, W)
 \begin{itemize}
 \item Что, если объект и повёрнут, и сдвинут?
 \pause
-\item Вычтем \begin{math}T\end{math} из точки начала луча
+\item Преобразование из `стандартного' объекта в повёрнутый и сдвинутый осуществляется как \begin{math}Y = T + R_Q\cdot X\end{math}, где \begin{math}R_Q\end{math} -- оператор вращения на кватернион \begin{math}Q\end{math}, а \begin{math}X\end{math} -- точка объекта
+\pause
+\item Нам нужно обратное преобразование: \begin{math}X = R_Q^{-1} \cdot (Y - T)\end{math}
+\pause
+\item Тогда алгоритм для преобразования луча такой:
+\pause
+\begin{itemize}
+\item Вычтем \begin{math}T\end{math} из точки начала луча, и повернёт результат на сопряжённый кватернион \begin{math}\overline{Q}\end{math}
 \pause
 \item Повернём вектор направления луча на сопряжённый кватернион \begin{math}\overline{Q}\end{math}
+\end{itemize}
 \pause
-\item Используем описанные ранее алгоритмы
+\item Используем описанные ранее алгоритмы с преобразованным лучом
 \end{itemize}
 \end{frame}
 
