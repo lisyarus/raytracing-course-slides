@@ -1,0 +1,123 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Практика 2}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Описание практики}
+В этой практике нужно добавить:
+\begin{itemize}
+\item Источники света
+\item Тени
+\item Три вида материалов
+\item Коррекцию цвета
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Описание материалов}
+\begin{itemize}
+\item В данной практике каждый материал -- или диффузный, или металл, или прозрачный диэлектрик
+\pause
+\item Для диффузного материала нужно вычислить вклад всех видов света (ambient + все источники) и домножить на цвет объекта
+\pause
+\item Для металла нужно вычислить цвет отражённого луча и домножить на цвет объекта
+\pause
+\item Для диэлектрика нужно вычислить цвет отражённого и преломлённого лучей, и смешать их по закону Френеля
+\pause
+\begin{itemize}
+\item Не забудьте про случай полного внутреннего рассеяния
+\pause
+\item Не забудьте, что для диэлектриков домножать на цвет объекта нужно только преломлённый свет, и только если мы смотрим снаружи объекта
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Коррекция цвета}
+\begin{itemize}
+\item Используем ACES tone-mapping по формуле из лекции, и затем гамма-коррекцию
+\pause
+\item \alert{\textbf{N.B.:}} Всё это \textbf{до} перевода из диапазона [0, 1] в пиксели 0..255
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат сцены: новые команды}
+\begin{itemize}
+\item \texttt{RAY\_DEPTH <depth>} -- максимальная глубина рекурсии
+\item \texttt{AMBIENT\_LIGHT <red> <green> <blue>} -- интенсивность глобального ambient освещения
+\item \texttt{NEW\_LIGHT} -- добавить новый источник света (последующие команды будут задавать его свойства)
+\item \texttt{LIGHT\_INTENSITY <red> <green> <blue>} -- интенсивность источника света
+\item \texttt{LIGHT\_DIRECTION <x> <y> <z>} -- нормированный вектор направления на источник света (только для направленных источников)
+\item \texttt{LIGHT\_POSITION <x> <y> <z>} -- позиция источника света (только для точечных источников)
+\item \texttt{LIGHT\_ATTENUATION <c0> <c1> <c2>} -- коэффициенты затухания источника света (только для точечных источников)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат сцены: новые команды}
+\begin{itemize}
+\item \texttt{METALLIC} -- материал последнего добавленного объекта -- металл
+\item \texttt{DIELECTRIC} -- материал последнего добавленного объекта -- диэлектрик
+\item Если не указаны \texttt{METALLIC} и \texttt{DIELECTRIC}, материал считается диффузным
+\item \texttt{IOR} -- коэффициент преломления для последнего добавленного объекта (имеет смысл только для диэлектриков)
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice2.txt}{\texttt{github.com/lisyarus/raytracing-course-slides/tree/trunk/example\_scenes/practice2.txt}}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены}
+\begin{figure}
+\slideimage{result.png}
+\end{figure}
+\end{frame}
+
+\end{document}

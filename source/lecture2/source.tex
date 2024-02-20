@@ -1,0 +1,1062 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Лекция 2: Освещение и тени, отражение и преломление света, металлы и диэлектрики, коррекция цвета}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Источники света}
+\begin{itemize}
+\item Свет излучается некоторой \textit{объёмной средой}: металл в лампе накаливания, газ в галогенной лампе, плазма на Солнце
+\pause
+\item Чтобы честно учитывать такое излучение, нужны очень сложные уравнения \textit{объёмного рендеринга}
+\pause
+\item Обычно достаточно считать, что свет излучается только поверхностью объекта -- источника света
+\pause
+\item Всё ещё сложно учитывать, нужны интегральные уравнения (сл. лекция)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Источники света}
+\begin{itemize}
+\item В real-time графике обычно используют аппроксимации:
+\pause
+\begin{itemize}
+\item Бесконечно удалённый (\textit{направленный}) источник света
+\pause
+\item Бесконечно маленький (\textit{точечный}) источник света
+\end{itemize}
+\pause
+\item В Whitted-style raytracing'е удобно использовать эти же аппроксимации
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Направленный источник света}
+\begin{itemize}
+\item Моделируют удалённые, мощные источники -- солнце, луна
+\pause
+\item Задаются вектором направления и интенсивностью (по трём цветовым каналам)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Два замечания}
+\begin{itemize}
+\item \textbf{\alert{N.B.:}} Есть два соглашения: использовать вектор \textit{на источник света}, или вектор \textit{направления движения света}. Это противоположные векторы, и в формулах надо учитывать, какой вектор используется. Мы будем использовать вектор \textit{на источник света}.
+\pause
+\item \textbf{\alert{N.B.:}} Интенсивность источника света, вообще говоря, ничем не ограничена, т.е. может быть сколь угодно большой. Это \textit{количество света}, а не \textit{цвет объекта}, который не может быть больше 1.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Точечный источник света}
+\begin{itemize}
+\item Моделируют относительно близкие источники -- костёр, свеча, лампа
+\pause
+\item Яркость обычно спадает при удалении от источника
+\pause
+\item Задаются положением в пространстве и функцией зависимости интенсивности от расстояния
+\pause
+\item Обычно берут такую функцию затухания (\textit{attenuation}) с расстоянием \begin{math}R\end{math}:
+\begin{equation*}
+\frac{I}{C_0 + C_1 R + C_2 R^2}
+\end{equation*}
+\pause
+\pause
+\item \begin{math}I\end{math} -- интенсивность света без учёта затухания (по трём каналам)
+\item \begin{math}C_0\neq 0\end{math} предотвращает сингулярность вблизи источника света
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1-3>[fragile,label=diffuse]
+\frametitle{Диффузные поверхности}
+\begin{itemize}
+\item Как учесть источники света при вычислении цвета пикселя? \pause Зависит от \textit{материала} объекта (подробнее на следующей лекции)
+\pause
+\item Один из простейших видов материалов -- \textit{диффузная} (она же -- \textit{ламбертова}) поверхность, отражающая падающий свет равномерно во всех направлениях
+\pause
+\item Если свет приходит из направления \begin{math}{\color{blue}L}\end{math} (это направление \textit{на свет}) на поверхность с цветом \begin{math}\color{green}\operatorname{color}\end{math} и нормалью \begin{math}N\end{math}, то эта поверхность отражает \begin{math}{\color{green}\operatorname{color}}\cdot({\color{blue}L} \cdot N)\end{math} света в сторону камеры
+\pause
+\item Если \begin{math}{\color{blue}L} \cdot N < 0\end{math}, свет \textit{вообще не попадает} на эту точку (светит с другой стороны поверхности)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Диффузная поверхность, направленный источник}
+\slideimage{diffuse.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Диффузная поверхность, точечные источники}
+\slideimage{point_lights.png}
+\end{frame}
+
+\againframe<3->{diffuse}
+
+\begin{frame}[fragile]
+\frametitle{Косинус угла падения}
+\begin{itemize}
+\item Откуда взялся \begin{math}{\color{blue}L} \cdot N\end{math}?
+\pause
+\item На поверхность площадью \begin{math}A\end{math} падает световой поток с площадью поперечного сечения \begin{math}{\color{blue} \Phi}\end{math} под углом \begin{math}\color{red}\theta\end{math}
+\item Тогда \begin{math}{\color{blue} \Phi} = A \cdot {\color{red} \cos \theta}\end{math}
+\item \begin{math}\Longrightarrow\end{math} На единицу площади приходится \begin{math}{\color{red}\cos \theta}\end{math} от общей плотности потока
+\end{itemize}
+\begin{center}
+\begin{tikzpicture}
+\draw[black,thick] (0.0, 0.0) -- (10.0, 0.0);
+\draw[black,thick] (4.5, 0.0) -- (8.5, 4.0);
+\draw[black,thick] (5.5, 0.0) -- (9.0, 3.5);
+\draw[black,thick] (4.5, -0.25) -- (4.5, 0.25);
+\draw[black,thick] (5.5, -0.25) -- (5.5, 0.25);
+\draw[blue,thick] (7.5, 3.0) -- (8.0, 2.5);
+\draw[red,thick] (5.5, 0.25) arc (90:45:0.25);
+
+\node[black] at (5.0, -0.5) {A};
+\node[blue] at (8.0, 3.0) {\begin{math}\Phi\end{math}};
+\node[red] at (5.75, 0.5) {\begin{math}\theta\end{math}};
+
+\only<3->{
+  \draw[black,thick,-stealth] (5.0, 3.0) -- (5.0, 3.5);
+  \draw[blue,thick,-stealth] (5.0, 3.0) -- (5.35, 3.35);
+
+  \node[black] at (5.0, 4.0) {\begin{math}N\end{math}};
+  \node[blue] at (5.7, 3.7) {\begin{math}L\end{math}};
+
+  \node[] at (2.0, 2.0) {\begin{math}{\color{red} \cos\theta} = N \cdot {\color{blue} L}\end{math}};
+}
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ambient освещение}
+\begin{itemize}
+\item Часто в сцене присутствет рассеянный свет `отовсюду': свет от неба, свет от звёзд, свет отразившийся от стен
+\pause
+\item Правильный способ это учитывать -- решать интегральное уравнение (следующая лекция)
+\pause
+\item Дешёвый способ это учитывать -- задать интенсивность ambient освещения и применять его ко всем точкам всех объектов (без косинусов, просто умножением на цвет объекта)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Диффузная поверхность: алгоритм}
+\begin{itemize}
+\item Строим луч из камеры в текущий пиксель
+\pause
+\item Находим пересечение со сценой
+\pause
+\item Вычисляем вклад ambient освещения
+\pause
+\item Проходимся по всем (точечным и направленным) источникам света
+\pause
+\begin{itemize}
+\item Вычисляем направление на этот источник и его яркость в точке пересечения
+\pause
+\item Вычисляем освещённость точки этим источником
+\end{itemize}
+\pause
+\item Цвет пикселя -- сумма вкладов всех источников света и ambient освещения
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Диффузная поверхность: много источников света}
+\slideimage{many_lights.png}
+\end{frame}
+
+\begin{frame}<1-2>[fragile,label=phong]
+\frametitle{Модель Фонга}
+\begin{itemize}
+\item К диффузной модели можно добавить т.н. \textit{specular} компоненту -- эвристическую аппроксимацию света, вышедшего из источника света и отражённого шероховатой поверхностью в направлении камеры
+\pause
+\item Ambient, diffuse и specular вместе дают \textit{модель Фонга} -- самую популярную простую модель освещения
+\pause
+\item Мы не будем явно реализовывать specular составляющую, -- вместо этого мы напрямую реализуем эффекты, которые она аппроксимирует
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Модель Фонга}
+\slideimage{phong.png}
+\end{frame}
+
+\againframe<2->{phong}
+
+
+
+
+
+
+
+
+\begin{frame}[fragile]
+\frametitle{Нормаль к поверхности}
+\begin{itemize}
+\item Раньше при вычислении пересечения луча с объетом нам было достаточно знать параметр \begin{math}t\end{math}, описывающий точку пересечения
+\pause
+\item Для рассчёта освещения нам нужна дополнительная информация: нормаль к поверхности в точке пересечения
+\pause
+\item Вектор нормали \textbf{всегда} должен быть нормирован, многие формулы будут это неявно использовать!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль к плоскости}
+\begin{itemize}
+\item Для плоскости, описываемой уравнением \begin{math}N\cdot V=0\end{math}, вектор \begin{math}N\end{math} и есть нормаль
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль к параллелепипеду}
+\begin{itemize}
+\item Зависит от того, на какой грани было ближайшее пересечение:
+\pause
+\begin{itemize}
+\item Если это грань -X (т.е. \begin{math}P_X = -S_X\end{math} в терминах прошлой лекции), то нормаль это вектор \begin{math}(-1, 0, 0)\end{math}
+\item Если это грань +X, то нормаль это вектор \begin{math}(1, 0, 0)\end{math}
+\item Если это грань -Y, то нормаль это вектор \begin{math}(0, -1, 0)\end{math}
+\item И т.д.
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль к параллелепипеду}
+\begin{itemize}
+\item Чтобы не делать тонну if'ов, можно схитрить: считая, что параллелепипед в центре координат, вычислить \begin{math}\frac{P}{S}\end{math}, где \begin{math}P\end{math} -- точка пересечения, а \begin{math}S\end{math} -- вектор размеров параллелепипеда по трём осям
+\pause
+\item Максимальная по модулю компонента вектора \begin{math}\frac{P}{S}\end{math} будет равна единице; если занулить две остальные компоненты, то получится искомая нормаль
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль к сфере}
+\begin{itemize}
+\item Если сфера имеет радиус 1, то вектор из начала координат (т.е. центра сферы) в точку пересечения \begin{math}P\end{math} и есть нормаль
+\pause
+\item Если сфера имеет произвольный радиус \begin{math}R\end{math}, то нормаль это вектор \begin{math}P/R\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль к сфере}
+\begin{itemize}
+\item Сфера описывается уравнением \begin{equation*}f(P) = X^2+Y^2+Z^2-R^2 = 0\end{equation*}
+\pause
+\item В общем случае, нормаль к поверхности, заданной уравнением \begin{math}f(P)=0\end{math}, это нормированный вектор градиента \begin{equation*}\frac{\nabla f(P)}{|\nabla f(P)|}\end{equation*}
+\pause
+\item В случае сферы \begin{equation*}\nabla f(P) = (2X, 2Y, 2Z)\end{equation*}
+\pause
+\item \alert{\textbf{N.B.}} Множитель 2 можно игнорировать -- он всё равно сократится при нормализации вектора
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль к эллипсоиду}
+\begin{itemize}
+\item Эллипсоид описывается уравнением \begin{equation*}f(P) = \frac{X^2}{R_X^2}+\frac{Y^2}{R_Y^2}+\frac{Z^2}{R_Z^2}-1 = 0\end{equation*}
+\pause
+\item Вычислим градиент: \begin{equation*}\nabla f(P) = \left(\frac{2X}{R_X^2}, \frac{2Y}{R_Y^2}, \frac{2Z}{R_Z^2}\right)\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Другой взгляд на эллипсоид}
+\begin{itemize}
+\item Эллипсоид с радиусами \begin{math}(R_X, R_Y, R_Z)\end{math} можно рассматривать как единичную сферу (\begin{math}R=1\end{math}), к которой применили неизотропное масштабирование
+\begin{equation*}
+\begin{pmatrix}
+R_X & 0 & 0 \\
+0 & R_Y & 0 \\
+0 & 0 & R_Z
+\end{pmatrix}
+\end{equation*}
+\pause
+\item Точке сферы \begin{math}(X, Y, Z)\end{math} соответствует точка эллипсоида \begin{math}(X\cdot R_X,Y\cdot R_Y,Z\cdot R_Z)\end{math}
+\pause
+\item Нормаль к сфере в этой точке \begin{math}(X, Y, Z)\end{math} превращается в нормаль к эллипсоиду
+\begin{equation*}
+\left(\frac{X\cdot R_X}{R_X^2},\frac{Y\cdot R_Y}{R_Y^2},\frac{Z\cdot R_Z}{R_Z^2}\right) = \left(\frac{X}{R_X},\frac{Y}{R_Y},\frac{Z}{R_Z}\right)
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Другой взгляд на эллипсоид}
+\begin{itemize}
+\item Нормаль к сфере в этой точке \begin{math}(X, Y, Z)\end{math} превращается в нормаль к эллипсоиду
+\begin{equation*}
+\left(\frac{X\cdot R_X}{R_X^2},\frac{Y\cdot R_Y}{R_Y^2},\frac{Z\cdot R_Z}{R_Z^2}\right) = \left(\frac{X}{R_X},\frac{Y}{R_Y},\frac{Z}{R_Z}\right)
+\end{equation*}
+\pause
+\item \begin{math}\Longrightarrow\end{math} При применении неизотропного масштабирования, к нормали нужно применить \textit{обратное} масштабирование
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль к объекту в общем положении}
+\begin{itemize}
+\item Если объект был сдвинут, нормаль никак не меняется
+\pause
+\item Если объект был повёрнут на кватернион \begin{math}Q\end{math}, и мы вычислили нормаль в системе координат объекта (повернув луч на \begin{math}\overline Q\end{math}), её нужно повернуть обратно в мировую систему координат тем же кватернионом \begin{math}Q\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль при произвольном преобразовании}
+\begin{itemize}
+\item Мы увидели две ситуации:
+\pause
+\begin{itemize}
+\item Если объект повёрнут, к нормали нужно применить \textit{такое же} преобразование
+\pause
+\item Если объект отмасштабирован, к нормали нужно применить \textit{обратное} преобразование
+\end{itemize}
+\pause
+\item Что происходит?
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль при произвольном преобразовании}
+\begin{itemize}
+\item Нормаль \begin{math}N\end{math} в точке поверхности объекта определяется тем, что она перпендикулярна касательной плоскости \begin{math}T\end{math} в этой точке:
+\begin{equation*}
+\forall V \in T \quad N\cdot V = 0
+\end{equation*}
+\pause
+\item Если к объекту применяется аффинное преобразование (линейное преобразование + сдвиг), к касательным векторам применяется его линейная часть \begin{math}A\end{math}:
+\begin{equation*}
+V \mapsto AV
+\end{equation*}
+\pause
+\item Преобразованная нормаль \begin{math}N'\end{math} должна быть перпендикулярна преобразованным касательным векторам:
+\begin{equation*}
+\forall V \in T \quad N'\cdot AV = 0
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль при произвольном преобразовании}
+\begin{itemize}
+\item По свойствам сопряженного оператора (т.е. транспонированной матрицы)
+\begin{equation*}
+N'\cdot AV = 0 \quad \Longleftrightarrow \quad A^{T}N' \cdot V = 0
+\end{equation*}
+\pause
+\item Мы знаем, что исходная нормаль перпендикулярна касательным векторам:
+\begin{equation*}
+A^{T}N' = N \quad\Longrightarrow\quad N' = (A^T)^{-1} N
+\end{equation*}
+\pause
+\item Обращение и транспонирование матрицы коммутируют между собой, поэтому их композицию часто обозначают как
+\begin{equation*}
+(A^T)^{-1} = (A^{-1})^T = A^{-T}
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль при произвольном преобразовании}
+\begin{itemize}
+\item Итак, в общем случае, если к объекту применили аффинное преобразование с линейной частью \begin{math}A\end{math}, то нормаль преобразуется посредством матрицы \begin{math}A^{-T}\end{math}
+\pause
+\item \alert{\textbf{N.B.}}: Нормаль после этого всё равно нужно отнормировать
+\pause
+\item \alert{\textbf{N.B.}}: Строго говоря, преобразование \begin{math}-A^{-T}\end{math} тоже отвечает нашим требованиям; мы выбираем \begin{math}A^{-T}\end{math} из условия сохранения ориентации пространства
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль при произвольном преобразовании}
+\begin{itemize}
+\item Поворот -- ортогональный оператор, т.е. \begin{math}A^T = A^{-1}\end{math} и \begin{math}A^{-T}=A\end{math}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Преобразование нормалей это такой же поворот
+\pause
+\begin{equation*}
+\end{equation*}
+\item Масштабирование -- симметричный оператор (имеет ортогональный базис из собственных векторов), т.е. \begin{math}A^T = A\end{math} и \begin{math}A^{-T}=A^{-1}\end{math}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Преобразование нормалей это обратное масштабирование
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль: внутри или снаружи}
+\begin{itemize}
+\item Описанные формулы для нормалей всегда дают \textit{внешнюю нормаль} к объекту, т.е. смотрящую наружу объекта
+\pause
+\item Если камера находится внутри объекта, нам нужна \textit{внутренняя нормаль}, смотрящая в противоположную сторону!
+\pause
+\item Проще всего это учесть по скалярному произведению направления луча \begin{math}D\end{math} и нормали \begin{math}N\end{math}: если \begin{math}D\cdot N < 0\end{math}, то мы смотрим снаружи объекта, иначе -- изнутри
+\pause
+\item Если мы изнутри объекта, нужно перевернуть нормаль, и сделать пометку, что мы внутри (это будет важно для преломления света)
+\pause
+\item \alert{\textbf{N.B.}}: С таким подходом получится, что `внутренность' плоскости это всё полупространство с одной стороны от этой плоскости -- так и задумано
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пересечение луча с геометрией}
+\begin{itemize}
+\item К этому моменту функция пересечения луча с геометрией должна возвращать как минимум три вещи:
+\pause
+\begin{itemize}
+\item Параметр \begin{math}t\end{math} точки пересечения
+\pause
+\item Нормаль \begin{math}N\end{math} к поверхности
+\pause
+\item Пометка, смотрим мы изнутри, или снаружи
+\end{itemize}
+\pause
+\item Удобно завести под это отдельную структуру в коде, и возвращать \mintinline{cpp}|optional<intersection>|
+\end{itemize}
+\end{frame}
+
+
+
+
+
+
+
+\begin{frame}[fragile]
+\frametitle{Тени: теория}
+\begin{itemize}
+\item Тень -- область сцены, в которую не попадает (заблокирован чем-то) прямой свет из конкретного источника света
+\item Свойство точки по отношению к конкретному источнику света
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени}
+\slideimage{shadows1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: теория}
+\begin{itemize}
+\item Если источник света точечный (или бесконечно удалённый), тень -- бинарное свойство: луч из точки сцены в источник света или пересекает что-то (точка в тени), или нет (точка не в тени) \begin{math}\Longrightarrow\end{math} жёсткие тени (\textit{hard shadows})
+\pause
+\item Если источник света объёмный, точка сцены может находиться в тени относительно части источника света, и не находиться в тени относительно другой его части \begin{math}\Longrightarrow\end{math} мягкие тени (\textit{soft shadows})
+\pause
+\begin{itemize}
+\item Точки, полностью находящиеся в тени -- \textit{umbra}
+\item Точки, частично находящиеся в тени -- \textit{penumbra} (\textit{полутень})
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: мягкие vs жёсткие}
+\slideimage{shadow-scheme1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Мягкие тени}
+\slideimage{shadows2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Солнечное затмение}
+\slideimage{eclipse.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: теория}
+\begin{itemize}
+\item Реальные источники света -- объёмные \begin{math}\Longrightarrow\end{math} реальные тени всегда мягкие
+\pause
+\item Размер и форма penumbra зависит от размеров и формы источника света, а также от расстояния до него (чем дальше, тем меньше penumbra)
+\pause
+\begin{itemize}
+\item В пределе расстояния \begin{math}\rightarrow\infty\end{math} мягкая тень вырождается в жёсткую
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: raytracing}
+\begin{itemize}
+\item Для получения честных мягких теней нужно решать интегральное уравнение (следующая лекция)
+\pause
+\item Для получения жёсткой тени можно послать дополнительный луч из точки объекта в направлении источника света (\textit{shadow ray}): если он что-то пересёк, то эта точка находится в тени этого источника света
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Жесткие тени: алгоритм}
+\begin{itemize}
+\item При вычислении цвета пикселя, при учёте вклада конкретного источника света, строим луч из точки объекта в направлении источника света
+\pause
+\item Пересекаем этот луч со сценой
+\pause
+\begin{itemize}
+\item Если пересечение есть, точка находится в тени, и вклад этого источника света равен нулю
+\pause
+\item В противном случае вычисляем вклад этого источника света, как и до этого
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Жесткие тени}
+\slideimage{shadows.png}
+\end{frame}
+
+\begin{frame}<1>[fragile,label=shadow_acne]
+\frametitle{Жесткие тени: shadow acne}
+\begin{itemize}
+\item Если в качестве начала shadow ray взять текущую освещаемую точку, возникнет артефакт \textit{shadow acne}
+\pause
+\item Это связано с тем, что пересечение луча со сценой иногда даёт нам ту же точку, в которой мы вычисляем освещение, а иногда нет -- в сущности, мы видим результат округления floating-point вычислений
+\pause
+\item В некоторых частных случаях это можно решить, запоминая, какой именно объект мы пересекли (работает только для непрозрачных выпуклых объектов)
+\pause
+\item Проще всего решить проблему грязным хаком: явно подвинуть начало луча в сторону от поверхности (в направлении луча, или в направлении нормали к поверхности) на маленькое расстояние, скажем, \begin{math}10^{-4}\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow acne}
+\slideimage{shadow_acne.png}
+\end{frame}
+
+\againframe<1->{shadow_acne}
+
+\begin{frame}<1>[fragile,label=point_shadow]
+\frametitle{Жесткие тени: точечный источник}
+\begin{itemize}
+\item При вычислении теней от точечного источника нас интересует только пересечение луча с объектами ближе источника света, иначе получатся неправильные тени
+\pause
+\item Если два способа это решить:
+\pause
+\begin{itemize}
+\item 1. После вычисления пересечения shadow ray со сценой сравнить параметр \begin{math}t\end{math}пересечения с расстоянием до источника света: если источник ближе, считаем, что точка \textbf{не в тени}
+\pause
+\item 2. Передавать в функцию вычисления пересечения луча со сценой максимальное расстояние вдоль луча как дополнительный параметр (в обычной ситуации равный \begin{math}+\infty\end{math}): все пересечения с \begin{math}t > max\end{math} нужно игнорировать
+\end{itemize}
+\pause
+\item Лучше сделать второй вариант: в дальнейшем он будет нам полезен для оптимизаций
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Неправильные тени от точечного источника}
+\slideimage{wrong_shadow.png}
+\end{frame}
+
+\againframe<1->{point_shadow}
+
+
+
+
+
+\begin{frame}[fragile]
+\frametitle{Более сложные материалы}
+\begin{itemize}
+\item Диффузная модель хорошо описывает матовые, шероховатые поверхности
+\pause
+\item Далеко не все поверхности в реальном мире -- диффузные!
+\pause
+\item В графике обычно рассматривают два основных вида нетривиальных поверхностей: \textit{металлы} и \textit{диэлектрики}
+\pause
+\item Более сложные материалы часто строятся как комбинация диффузной, металлической, и диэлектрической моделей
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Металлы}
+\begin{itemize}
+\item Особенность металлов в том, что они \textit{отражают} приходящий свет
+\pause
+\item То, сколько света отразится, определяется \textit{цветом} металла
+\pause
+\item Отражения от шероховатого металла -- размытые (в пределе получится диффузная поверхность), и чтобы честно их учитывать, нужно, -- вы не поверите! -- решать интегральное уравнение
+\pause
+\item Идеальные (неразмытые) отражения легко получить, послав дополнительный луч
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Направление отражённого луча}
+\begin{itemize}
+\item Пусть свет пришёл из направления \begin{math}L\end{math} в точку с нормалью \begin{math}N\end{math}
+\pause
+\item Направление отражённого луча \begin{math}R\end{math} можно вычислить по формуле 
+\begin{equation*}
+R = 2N\cdot(N \cdot L) - D
+\end{equation*}
+\pause
+\item У нас \begin{math}L=-D\end{math}, где \begin{math}D\end{math} -- направление луча из камеры, и формула переписывается как
+\begin{equation*}
+R = D - 2N\cdot(N \cdot D)
+\end{equation*}
+\pause
+\item \alert{\textbf{N.B.}}: Как и с теневым лучом, начало отражённого луча нужно немного подвинуть в сторону \textit{от} поверхности
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Металлическая поверхность: алгоритм}
+\begin{itemize}
+\item Строим луч из камеры в текущий пиксель
+\pause
+\item Находим пересечение со сценой
+\pause
+\item Строим отражённый луч
+\pause
+\item Рекурсивно вызываем функцию получения света по лучу в направлении отражённого луча
+\pause
+\item Цвет пикселя -- полученный рекурсивным вызовом свет, умноженный на цвет металлического объекта
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Металлическая поверхность}
+\slideimage{reflection.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Металлическая поверхность: рекурсия}
+\begin{itemize}
+\item Мы впервые столкнулись с необходимостью \textit{рекурсивно} вызвать функцию получения света по лучу
+\pause
+\item В общем случае ничто не гарантирует, что эта рекурсия закончится за разумное число шагов
+\pause
+\item Стандартное решение -- ограничить максимальную глубину рекурсии некоторым числом, обычно от 4 до 16
+\end{itemize}
+\end{frame}
+
+
+
+
+
+\begin{frame}<1-2>[fragile,label=dielectric]
+\frametitle{Диэлектрики}
+\begin{itemize}
+\item Диэлектрик -- вещество, не проводящее ток (в физике определение не совсем такое, но нам это не важно)
+\pause
+\item Особенность диэлектриков в том, что они как отражают, так и преломляют свет
+\pause
+\item За эти процессы отвечают закон Снеллиуса и уравнения Френеля
+\pause
+\item \alert{\textbf{N.B.}}: Непрозрачные объекты -- часто тоже диэлектрики, но эффекты поглощения и рассеяния света внутри этих объектов делают их непрозрачными; обычно такие объекты моделируют как диффузные с отражающим покрытием, описывающимся уравнениями Френеля
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Диэлектрики}
+\slideimage{dielectric.jpg}
+\end{frame}
+
+\againframe<2->{dielectric}
+
+\begin{frame}<1-2>[fragile,label=dielectric]
+\frametitle{Закон Снеллиуса (Snell's Law)}
+\begin{itemize}
+\item Пусть свет идёт из среды с коэффициентом преломления \begin{math}\eta_1\end{math} в среду с коэффициентом \begin{math}\eta_2\end{math}
+\pause
+\item Тогда угол падения \begin{math}\theta_1\end{math} (между падающим лучом и нормалью к поверхности) и угол преломления \begin{math}\theta_2\end{math} связаны соотношением
+
+\begin{equation*}
+\eta_1 \cdot \sin \theta_1 = \eta_2 \cdot \sin \theta_2
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Закон Снеллиуса (Snell's Law)}
+\slideimage{snells_law.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Коэффициент преломления}
+\begin{itemize}
+\item Коэффициент преломления (\textit{refractive index} или \textit{index of reflection} -- \textit{IOR}) связан со скоростью распространения света в среде
+\pause
+\item Типичные значения:
+\begin{itemize}
+\item Воздух: 1
+\item Вода: 1.333
+\item Стекло: 1.5
+\item Алмаз: 2.4
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{IOR = 1}
+\slideimage{ior_100.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{IOR = 1.01}
+\slideimage{ior_101.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{IOR = 1.02}
+\slideimage{ior_102.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{IOR = 1.05}
+\slideimage{ior_105.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{IOR = 1.1}
+\slideimage{ior_110.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{IOR = 1.3}
+\slideimage{ior_130.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{IOR = 1.5}
+\slideimage{ior_150.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{IOR = 2}
+\slideimage{ior_200.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Направление преломлённого луча}
+\begin{itemize}
+\item Из закона Снеллиуса можно вывести формулу для направления преломлённого луча
+\pause
+\item Пусть свет падает из направления \begin{math}L\end{math} на поверхность с нормалью \begin{math}N\end{math}
+\pause
+\item Тогда направление преломлённого луча \begin{math}R\end{math} можно вычислить как
+\begin{equation*}
+\begin{gathered}
+\cos\theta_1 = N\cdot L \\
+\sin\theta_2 = \frac{\eta_1}{\eta_2}\sqrt{1-\cos^2\theta_2} = \frac{\eta_1}{\eta_2}\sqrt{1-(N\cdot L)^2} \\
+\cos\theta_2 = \sqrt{1 - \sin^2\theta_2} \\
+R = \frac{\eta_1}{\eta_2}(-L) + \left(\frac{\eta_1}{\eta_2}\cos\theta_1 - \cos\theta_2\right)\cdot N
+\end{gathered}
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Направление преломлённого луча}
+\begin{itemize}
+\item Нас интересует, откуда придёт свет, который после преломления попадёт в направлении камеры
+\pause
+\item \begin{math}\Longrightarrow\end{math} Для луча из камеры в направлении \begin{math}D\end{math} в формулах прошлого слайда нужно взять \begin{math}L = -D\end{math}
+\pause
+\item \begin{math}\eta_1\end{math} положим равным 1 (воздух)
+\pause
+\item \begin{math}\eta_2\end{math} -- часть описания материала
+\pause
+\item Если луч пришёл изнутри объекта, \begin{math}\eta_1\end{math} и \begin{math}\eta_2\end{math} нужно \textbf{поменять местами}!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Полное внутреннее отражение}
+\begin{itemize}
+\item Посмотрим внимательнее на формулу
+\begin{equation*}
+\sin\theta_2 = \frac{\eta_1}{\eta_2}\sqrt{1-\cos^2\theta_2} = \frac{\eta_1}{\eta_2}\sqrt{1-(N\cdot L)^2}
+\end{equation*}
+\pause
+\item Если \begin{math}\eta_1 > \eta_2\end{math}, значение \begin{math}\sin\theta_2\end{math} может оказаться больше 1 по модулю
+\pause
+\item В этом случае преломления нет, и объект только отражает свет -- происходит \textit{полное внутреннее отражение}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Полное внутреннее отражение}
+\slideimage{turtle.jpg}
+\end{frame}
+
+\begin{frame}
+\frametitle{Уравнения Френеля}
+\begin{itemize}
+\item Описывают то, сколько света отразится, а сколько -- пройдёт сквозь объект (и преломился по закону Снеллиуса)
+\pause
+\item Сложные уравнения, учитывающие поляризацию света
+\pause
+\item В графике почти всегда считается, что свет не поляризован
+\pause
+\item Вместо настоящих уравнений Френеля используется \textit{аппроксимация Шлика}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Аппроксимация Шлика (Schlick's approximation)}
+\begin{itemize}
+\item Пусть свет падает из направления \begin{math}L\end{math} на диэлектрическую поверхность с нормалью \begin{math}N\end{math}
+\pause
+\item Тогда отразится свет в количестве
+\begin{equation*}
+R = R_0 + (1 - R_0) \cdot (1 - (N \cdot L))^5
+\end{equation*}
+\pause
+\item Соответственно, преломится свет в количестве \begin{math}1-R\end{math}
+\pause
+\item Здесь, \begin{math}R_0\end{math} -- коэффициент отражения, если смотреть прямо на поверхность; он равен
+\begin{equation*}
+R_0 = \left(\frac{\eta_1-\eta_2}{\eta_1+\eta_2}\right)^2
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Диэлектрики: алгоритм}
+\begin{itemize}
+\item Строим луч из камеры в текущий пиксель
+\pause
+\item Находим пересечение со сценой
+\pause
+\item Вычисляем \begin{math}\sin\theta_2\end{math}
+\pause
+\item Если он \begin{math}\leq 1\end{math}:
+\pause
+\begin{itemize}
+\item Вычисляем преломлённый и отражённый лучи
+\pause
+\item Рекурсивно получаем свет, приходящий из этих направлений
+\pause
+\item Цвет пикселя -- среднее этих значений с коэффициентами согласно аппроксимации Шлика
+\end{itemize}
+\pause
+\item Если он \begin{math}> 1\end{math}:
+\pause
+\begin{itemize}
+\item Полное внутреннее отражение, цвет пикселя это отражённый свет
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Диэлектрики: цвет}
+\begin{itemize}
+\item Цвет полупрозрачного объекта определяется тем, как он окрашивает \textit{проходящий сквозь себя} свет
+\pause
+\item Правильно было бы учитывать то, как далеко свет шёл внутри полупрозрачного объекта, пока не вышел из него, и использовать формулы из volume rendering'а
+\pause
+\item Пока будем использовать аппроксимацию: если мы смотрим на диэлектрик снаружи, то преломлённый свет (но \textbf{не отражённый}) нужно умножить на цвет объекта
+\end{itemize}
+\end{frame}
+
+
+
+
+
+\begin{frame}<1>[fragile,label=gamma]
+\frametitle{Гамма}
+\begin{itemize}
+\item Пока мы не задумывались о том, что за значения мы записываем в пиксели выходной картинки
+\pause
+\item Обычно, интенсивность света \begin{math}I\end{math}, излучаемого монитором, нелинейно зависит от значения \begin{math}V\end{math}, записанного в пикселе
+\pause
+\item Это лучше соответствует восприятию света человеком и даёт больше точности тёмным цветам, которые человек различает лучше
+\pause
+\item Почти всегда используется показательная функция:
+\begin{equation}I \sim V^\gamma\end{equation}
+\pause
+\item \begin{math}\gamma\end{math} обычно равна 2.2 (некоторые компьютеры Macintosh использовали 1.8)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Линейное значение пикселя vs линейная интенсивность излучения}
+\begin{figure}
+\slideimage{gamma-scale.png}
+\end{figure}
+\end{frame}
+
+\againframe<2->{gamma}
+
+\begin{frame}[fragile,label=gamma2]
+\frametitle{Проблемы гаммы}
+\begin{itemize}
+\item Искажается восприятие относительных яркостей, особенно при реалистичном рендеринге (e.g. объект в два раза ярче не будет выглядеть в два раза ярче)
+\pause
+\item Неправильно выглядит освещение, наложение источников света, и т.д.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Коррекция гаммы (gamma-correction)}
+\begin{itemize}
+\item Коррекция гаммы -- общий термин для применения любых нелинейных преобразований над интенсивностью пикселя
+\pause
+\item В рендеринге под гамма-коррекцией обычно подразумевают применение обратного к \begin{math}V^{2.2}\end{math} преобразования, чтобы получить линейную зависимость выходящего излучения от значения пикселя
+\pause
+\item В нашем случае сводится к тому, что перед записью вычисленного цвета в пиксель, его нужно возвести в степень: \begin{math}V^{1/2.2}\end{math} (\textbf{до} конвертации в диапазон 0..255)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Эффекты коррекции гаммы}
+\slideimage{gamma-ex1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Эффекты коррекции гаммы}
+\slideimage{gamma-ex2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Эффекты коррекции гаммы}
+\slideimage{gamma-ex3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Эффекты коррекции гаммы}
+\begin{itemize}
+\item Типичные эффекты гамма-коррекции:
+\pause
+\begin{itemize}
+\item Картинка становится ярче (чем темнее цвет, тем больше прирост яркости)
+\pause
+\item Картинка становится менее контрастной
+\pause
+\item Освещение выглядит правильнее
+\pause
+\item Переход от освещённой к неосвещённой области объекта выглядит более резким (как в реальности)
+\end{itemize}
+\pause
+\item Некоторые tone-mapping кривые \textbf{уже включают} в себя гамма-коррекцию!
+\end{itemize}
+\end{frame}
+
+
+
+
+
+
+
+\begin{frame}[fragile]
+\frametitle{HDR}
+\begin{itemize}
+\item Проблема: после вычисления освещённости пикселя мы можем получить значения компонент цвета большие, чем 1, и при записи в пиксель они будут обрезаны до 1
+\pause
+\item В реальном мире интенсивность света ничем не ограничена, и между солнечным днём и тёмной ночью может меняться на 15 порядков
+\pause
+\item Объект может освещаться тусклым ambient освещением, а может сразу десятком ярких источников света
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{HDR}
+\begin{itemize}
+\item High Dynamic Range (HDR) -- термин, означающий большой (не ограниченный \begin{math}[0, 1]\end{math}) диапазон интенсивностей света
+\pause
+\item HDR текстура (например, environment map) -- содержит значения, выходящие за диапазон \begin{math}[0, 1]\end{math} (например, 32-bit floating-point)
+\pause
+\item HDR рендеринг -- позволяет отобразить HDR-освещение
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Tone mapping}
+\begin{itemize}
+\item Чтобы поддержать HDR рендеринг, нужно превратить диапазон освещённостей \begin{math}[0, \infty)\end{math} в диапазон \begin{math}[0, 1]\end{math}
+\pause
+\item В принципе, подойдёт любая монотонно возрастающая функция \begin{math}[0, \infty)\rightarrow [0, 1]\end{math} -- \textit{tone-mapping curve}:
+\begin{itemize}
+\item \begin{math}x \mapsto \frac{x}{1+x}\end{math} -- \textit{Reinhard operator}
+\item \begin{math}x \mapsto \arctan(x)\end{math}
+\item \begin{math}x \mapsto \frac{2}{1+e^{-x}}-1\end{math}
+\end{itemize}
+\pause
+\item Иногда используют более сложные функции, взятые из кинематографа (filmic tone mapping)
+\pause
+\item Часто всё равно ограничивают диапазон входных интенсивностей каким-то настраиваемым значением \begin{math}W\end{math} (\textit{white}), и делают нелинейное преобразование \begin{math}[0, W] \rightarrow [0, 1]\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Reinhard operator}
+\slideimage{reinhard.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Filmic tone mapping curve (ACES)}
+\slideimage{aces.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Рациональная аппроксимация ACES}
+\usemintedstyle{solarized-light}
+\begin{minted}[bgcolor=lightbg]{cpp}
+vec3 saturate(vec3 const & color)
+{
+  return clamp(color, vec3(0.0), vec3(1.0));
+}
+
+glm::vec3 aces_tonemap(glm::vec3 const & x)
+{
+  const float a = 2.51f;
+  const float b = 0.03f;
+  const float c = 2.43f;
+  const float d = 0.59f;
+  const float e = 0.14f;
+  return saturate((x*(a*x+b))/(x*(c*x+d)+e));
+}
+\end{minted}
+\pause
+\begin{itemize}
+\item Мы будем использовать именно её
+\end{itemize}
+\end{frame}
+
+\end{document}
