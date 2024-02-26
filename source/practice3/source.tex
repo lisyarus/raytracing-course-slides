@@ -1,0 +1,121 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt,handout]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Практика 3}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Описание практики}
+В этой практике:
+\begin{itemize}
+\item Источники света (в т.ч. ambient) становятся не нужны -- вместо них любой объект может излучать свет
+\item Вычисление цвета пикселя нужно сделать с помощью Монте-Карло интегрирования
+\item Описание материалов -- как в прошлой практике (но добавляется излучение)
+\item Должно быть реализовано сглаживание, как описано в лекции
+\item \textbf{\alert{N.B.}}: Всё усреднение делается \textbf{до} tone-mapping'а и гамма-коррекции!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат сцены: новые команды}
+\begin{itemize}
+\item \texttt{SAMPLES <samples>} -- количество семплов на пиксель (один семпл здесь это один луч и все сделанные им рекурсивные вызовы)
+\item \texttt{EMISSION <red> <green> <blue>} -- (при описании материала объекта) цвет излучения \begin{math}E\end{math} объекта, т.е. \begin{math}L_e(\omega) = E\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Примеры сцены}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_1.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_1.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_2.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_2.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_3.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_3.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_4.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_4.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_5.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_5.txt}}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены №1}
+\begin{figure}
+\slideimage{practice3_1.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены №2}
+\begin{figure}
+\slideimage{practice3_2.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены №3}
+\begin{figure}
+\slideimage{practice3_3.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены №4}
+\begin{figure}
+\slideimage{practice3_4.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены №5}
+\begin{figure}
+\slideimage{practice3_5.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Примеры сцен}
+\begin{itemize}
+\item Изображения тестовых сцен сгенерированы с довольно большим числом семплов (\begin{math}\sim\end{math}4k)
+\item При ручном тестировании удобнее использовать маленькое число семплов -- скажем, 64 или даже 16
+\item Придётся научиться глазами делать денойзинг :)
+\end{itemize}
+\end{frame}
+
+\end{document}
