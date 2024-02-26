@@ -1,0 +1,1290 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Лекция 3: Радиометрия, распространение света, уравнение рендеринга, описание материалов, Монте-Карло интегрирование}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Немного радиометрии}
+\begin{itemize}
+\item Мы будем описывать связь между различными величинами, означающими \textit{количество света}
+\pause
+\item Полезно чётко разобраться, какие величины что означают
+\pause
+\item Наука, занимающаяся этими величинами, называется \textbf{радиометрией (radiometry)} 
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Энергия излучения (radiant energy)}
+\begin{itemize}
+\item Центральный объект радиометрии -- \textbf{энергия излучения (radiant energy)} \begin{math}Q\end{math}: \textit{количество энергии}, излучённое или отражённое объектом / прошедшее через среду / etc
+\pause
+\item Единица измерения энергии -- \begin{math}\text{J}\end{math} (джоули), как и в обычной физике
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Энергия излучения (radiant energy)}
+\begin{itemize}
+\item Светящиеся объекты (напр. лампочка) излучают свет непрерывно, т.е. суммарная энергия их излучения постоянно растёт
+\pause
+\item Другие объекты поглощают/отражают свет непрерывно, т.е. суммарная энергия поглощения/отражения тоже постоянно растёт
+\pause
+\item Мы будем считать, что сцена статична и находится в эквилибриуме, т.е. яркость точек сцены не меняется со временем
+\pause
+\item \begin{math}\Longrightarrow\end{math} Для нас интереснее не общее количество энергии, а энергия за единицу времени
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Поток излучения (radiant flux)}
+\begin{itemize}
+\item \textbf{Поток излучения (radiant flux)} \begin{math}\Phi\end{math} -- энергия излучения за единицу времени \begin{math}t\end{math} (или производная энергии по времени)
+\begin{equation*}
+\Phi = \frac{\partial Q}{\partial t}
+\end{equation*}
+\pause
+\begin{itemize}
+\item Например, поток, проходящий свкозь некоторую поверхность
+\end{itemize}
+\pause
+\item Единица измерения -- \begin{math}\text{J}\cdot \text{s}^{-1} = \text{W}\end{math} (джоули в секунду = ватты)
+\pause
+\item Примеры:
+\begin{itemize}
+\item Поток излучения типичной светодиодной лампы \begin{math}\Phi = 10\end{math} ватт
+\pause
+\item Поток излучения Солнца \begin{math}\Phi = 3.86 \times 10^{26}\end{math} ватт
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Светимость / облучённость (radiant exitance / irradiance)}
+\begin{itemize}
+\item \textbf{Светимость (radiant exitance)} \begin{math}M\end{math} -- поток излучения, излучённый единицей поверхности \begin{math}\sigma\end{math} объекта
+\begin{equation*}
+M = \frac{\partial \Phi}{\partial \sigma}
+\end{equation*}
+\pause
+\item \textbf{Облучённость (irradiance)} \begin{math}E\end{math} -- поток излучения, падающий на единицу поверхности \begin{math}\sigma\end{math} объекта
+\begin{equation*}
+E = \frac{\partial \Phi}{\partial \sigma}
+\end{equation*}
+\pause
+\item Единица измерения -- \begin{math}\text{W}\cdot \text{m}^{-2}\end{math} (ватты на квадратный метр)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Светимость / облучённость (radiant exitance / irradiance)}
+\begin{itemize}
+\item Например, если точечный источник излучает \textbf{поток излучения} \begin{math}\Phi\end{math} ватт, и на расстоянии \begin{math}r\end{math} от него находится поверхность, образующая угол \begin{math}\theta\end{math} с направлением на источник, то \textbf{облучённость} этой поверхности составляет \begin{equation*}\frac{\Phi\cos\theta}{4\pi r^2}\end{equation*} ватт на квадратный метр
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Сила излучения (radiant intensity)}
+\begin{itemize}
+\item \textbf{Сила излучения (radiant intensity)} \begin{math}I\end{math} -- поток излучения, излучённый/принятый/отражённый поверхностью в некотором направлении \begin{math}\omega\end{math}
+\begin{equation*}
+I = \frac{\partial \Phi}{\partial \omega}
+\end{equation*}
+\pause
+\item Единица измерения -- \begin{math}\text{W}\cdot \text{sr}^{-1}\end{math} (ватты на стерадиан)
+\pause
+\item Например, если точечный источник излучает \textbf{поток излучения} \begin{math}\Phi\end{math} ватт равномерно во всех направлениях, то его \textbf{сила излучения} равна \begin{math}\frac{\Phi}{4\pi}\end{math} ватт на стерадиан
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Яркость (radiance)}
+\begin{itemize}
+\item \textbf{Яркость (radiance)} \begin{math}L\end{math} -- поток излучения, излучённый/принятый/отражённый поверхностью в некотором направлении \begin{math}\omega\end{math} на единицу площади \begin{math}\sigma\cos\theta\end{math} проекции этой поверхности перпендикулярно направлению света
+\begin{equation*}
+L = \frac{\partial^2 \Phi}{\partial \omega \partial \sigma \cos \theta}
+\end{equation*}
+\pause
+\item Единица измерения -- \begin{math}\text{W}\cdot \text{m}^{-2} \cdot \text{sr}^{-1}\end{math} (ватты на квадратный метр на стерадиан)
+\pause
+\item Самая важная для нас величина!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Радиометрия TL;DR}
+\begin{itemize}
+\item \textbf{Поток излучения (radiant flux)} \begin{math}\Phi\end{math} -- световая энергия за единицу времени
+\pause
+\item \textbf{Светимость / облучённость (radiant exitance / irradiance)} \begin{math}\Phi\end{math} -- на единицу поверхности (= в конкретной точке)
+\pause
+\item \textbf{Сила излучения (radiant intensity)} \begin{math}\Phi\end{math} -- на единицу телесного угла (= в конкретном направлении)
+\pause
+\item \textbf{Яркость (radiance)} \begin{math}\Phi\end{math} -- на единицу телесного угла на единицу поверхности (= в конкретном направлении в конкретной точке)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Радиометрия}
+\begin{itemize}
+\item В литературе по рендерингу часто встречаются радиометрические термины -- полезно понимать, о чём идёт речь
+\pause
+\item \textbf{\alert{N.B.}}: В науке \textit{фотометрии} есть абсолютно аналогичные термины, но не для энергии, а для \textit{воспринимаемой человеком} яркости (усреднённой энергии света в видимом диапазоне)
+\pause
+\item \textbf{\alert{N.B.}}: Исторически, а также в других науках (напр. в астрономии) есть те же величины и те же названия, но соответствие величин и названий другое
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Радиометрия: ссылки}
+\begin{itemize}
+\item \href{https://en.wikipedia.org/wiki/Radiant_energy}{\texttt{en.wikipedia.org/wiki/Radiant\_energy}}
+\item \href{https://www.cs.toronto.edu/~kyros/courses/418/Lectures/lecture.2010f.10.pdf}{\texttt{Слайды с объяснением радиометрических величин}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Что такое свет}
+\begin{itemize}
+\item Свет -- электромагнитная волна
+\pause
+\item Пара векторных полей (электрическое \begin{math}\mathbf{E}\end{math} и магнитное \begin{math}\mathbf{B}\end{math}), описываемых уравнениями Максвелла
+\begin{center}
+\begin{math}
+\begin{matrix}
+\nabla \cdot \mathbf{E} = 4 \pi \rho \\
+\nabla \cdot \mathbf{B} = 0 \\
+\nabla \times \mathbf{E} = -\frac{1}{c} \frac{\partial \mathbf B}{\partial t} \\
+\nabla \times \mathbf{B} = \frac{1}{c} \left(4 \pi \mathbf J + \frac{\partial \mathbf E}{\partial t} \right)
+\end{matrix}
+\end{math}
+\end{center}
+\pause
+\item Линейное волновое уравнение \begin{math}\Longrightarrow\end{math} раскладывается в сумму волн фиксированной длины волны \begin{math}\lambda\end{math} (монохроматические волны)
+\pause
+\item Много нетривиальных эффектов: интерференция, дифракция, поляризация, сложное взаимодействие с веществом
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Свет}
+\begin{itemize}
+\item В графике обычно достаточно геометрической оптики -- предела при \begin{math}\lambda\rightarrow 0\end{math}
+\pause
+\item Свет распространяется прямыми лучами (исключение -- граница раздела сред или неоднородные среды)
+\pause
+\item Свет распространяется бесконечно быстро (\begin{math}c \rightarrow \infty\end{math})
+\pause
+\item Луч света разбивается в сумму монохроматических лучей, каждая имеет свою амплитуду (количество света)
+\pause
+\item Интересуют только волны \textit{видимого спектра}, который мы раскладываем в сумму {\color{red}красного}, {\color{green}зелёного} и {\color{blue}синего}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Видимый спектр}
+\slideimage{visible-spectrum.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Фиолетовый цвет}
+\slideimage{blue-red-spectrum.png}
+\end{frame}
+
+\begin{frame}<1-3>[fragile,label=materials]
+\frametitle{Столкновение света с поверхностью}
+\begin{itemize}
+\item Что происходит, когда луч света сталкивается с некой поверхностью?
+\pause
+\item Зависит от её \textit{материала}:
+\pause
+\begin{itemize}
+\item Абсолютно чёрное тело: поглощает весь свет
+\pause
+\item Зеркало: отражает свет в строго определённом направлении
+\pause
+\item Старое, плохо отполированное зеркало / лакированная поверхность: отражает свет примерно в определённом направлении
+\pause
+\item Диффузная (ламбертова) поверхность: отражает свет во все стороны равномерно
+\pause
+\item Диэлектрики (вода, стекло): частично отражает, частично преломляет (закон Френеля)
+\pause
+\item Воск: частично отражает, частично преломляет, но свет заходит неглубоко (subsurface scattering)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Абсолютно чёрное тело}
+\slideimage{blackbody.png}
+\end{frame}
+
+\againframe<3-4>{materials}
+
+\begin{frame}[fragile]
+\frametitle{Зеркало}
+\slideimage{specular.png}
+\end{frame}
+
+\againframe<4-5>{materials}
+
+\begin{frame}[fragile]
+\frametitle{Старое зеркало}
+\slideimage{specular_rough.png}
+\end{frame}
+
+\againframe<5-6>{materials}
+
+\begin{frame}[fragile]
+\frametitle{Диффузная поверхность}
+\slideimage{diffuse.png}
+\end{frame}
+
+\againframe<6-7>{materials}
+
+\begin{frame}[fragile]
+\frametitle{Стекло}
+\slideimage{glass.png}
+\end{frame}
+
+\againframe<7-8>{materials}
+
+\begin{frame}[fragile]
+\frametitle{Воск}
+\slideimage{wax.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Столкновение света с поверхностью}
+\begin{itemize}
+\item Что происходит, когда луч света сталкивается с некой поверхностью?
+\pause
+\item \begin{math}\Longrightarrow\end{math} Свет, выходящий в каком-то направлении, складывается из света, пришедшего из \textit{всех направлений}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Абсолютно чёрное тело}
+\begin{center}
+\begin{tikzpicture}
+\draw[black,thick] (0.0, 0.0) -- (10.0, 0.0);
+\draw[blue,thick,-stealth] (8.0, 3.0) -- (5.5, 0.5);
+
+\node[] at (5.0, 0.0) {\begin{math}\bullet\end{math}};
+\node[] at (5.0, -0.5) {\begin{math}p\end{math}};
+\node[blue] at (8.5, 3.5) {\begin{math}\vec\omega_{in}\end{math}};
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Зеркало}
+\begin{center}
+\begin{tikzpicture}
+\draw[black,thick] (0.0, 0.0) -- (10.0, 0.0);
+\draw[blue,thick,-stealth] (8.0, 3.0) -- (5.5, 0.5);
+\draw[magenta,thick,-stealth] (4.5, 0.5) -- (2.0, 3.0);
+
+\node[] at (5.0, 0.0) {\begin{math}\bullet\end{math}};
+\node[] at (5.0, -0.5) {\begin{math}p\end{math}};
+\node[blue] at (8.5, 3.5) {\begin{math}\vec\omega_{in}\end{math}};
+\node[magenta] at (1.5, 3.5) {\begin{math}\vec\omega_{out}\end{math}};
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Старое зеркало / лакированная поверхность}
+\begin{center}
+\begin{tikzpicture}
+\draw[black,thick] (0.0, 0.0) -- (10.0, 0.0);
+\draw[blue,thick,-stealth] (8.0, 3.0) -- (5.5, 0.5);
+\draw[magenta,thick,-stealth] (4.5, 0.5) -- (2.0, 3.0);
+\draw[magenta,thick,-stealth] (4.64, 0.6) -- (3.5, 2.5);
+\draw[magenta,thick,-stealth] (4.78, 0.67) -- (4.5, 1.5);
+\draw[magenta,thick,-stealth] (4.4, 0.36) -- (2.5, 1.5);
+\draw[magenta,thick,-stealth] (4.33, 0.22) -- (3.5, 0.5);
+
+\node[] at (5.0, 0.0) {\begin{math}\bullet\end{math}};
+\node[] at (5.0, -0.5) {\begin{math}p\end{math}};
+\node[blue] at (8.5, 3.5) {\begin{math}\vec\omega_{in}\end{math}};
+\node[magenta] at (1.5, 3.5) {\begin{math}\vec\omega_{out}\end{math}};
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Диффузная поверхность}
+\begin{center}
+\begin{tikzpicture}
+\draw[black,thick] (0.0, 0.0) -- (10.0, 0.0);
+\draw[blue,thick,-stealth] (8.0, 3.0) -- (5.5, 0.5);
+\draw[magenta,thick,-stealth] (4.387627564304205, 0.35355339059327373) -- (1.3257653858252327, 2.121320343559642);
+\draw[magenta,thick,-stealth] (4.646446609406726, 0.6123724356957946) -- (2.878679656440357, 3.674234614174767);
+\draw[magenta,thick,-stealth] (5.0, 0.7071067811865476) -- (5.0, 4.242640687119285);
+\draw[magenta,thick,-stealth] (5.353553390593274, 0.6123724356957946) -- (7.121320343559642, 3.6742346141747673);
+\draw[magenta,thick,-stealth] (5.612372435695795, 0.35355339059327373) -- (8.674234614174768, 2.121320343559642);
+
+\node[] at (5.0, 0.0) {\begin{math}\bullet\end{math}};
+\node[] at (5.0, -0.5) {\begin{math}p\end{math}};
+\node[blue] at (8.5, 3.5) {\begin{math}\vec\omega_{in}\end{math}};
+\node[magenta] at (1.5, 3.5) {\begin{math}\vec\omega_{out}\end{math}};
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Стекло}
+\begin{center}
+\begin{tikzpicture}
+\draw[black,thick] (0.0, 0.0) -- (10.0, 0.0);
+\draw[blue,thick,-stealth] (8.0, 3.0) -- (5.5, 0.5);
+\draw[magenta,thick,-stealth] (4.646446609406726, -0.6123724356957944) -- (2.878679656440356, -3.6742346141747655);
+
+\node[] at (5.0, 0.0) {\begin{math}\bullet\end{math}};
+\node[] at (5.0, -0.5) {\begin{math}p\end{math}};
+\node[blue] at (8.5, 3.5) {\begin{math}\vec\omega_{in}\end{math}};
+\node[magenta] at (2.5251262658470814, -4.28660704987056) {\begin{math}\vec\omega_{out}\end{math}};
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Уравнение рендеринга (Kajiya, 1986)}
+\begin{equation*}
+\hspace*{-0.5cm}
+{\color{magenta}L_{out}}(p, {\color{magenta}\vec\omega_{out}}, \lambda) = L_{e}(p, {\color{magenta}\vec\omega_{out}}, \lambda)+\int\limits_{\mathbb S^2} {\color{blue}L_{in}}(p, {\color{blue}\vec\omega_{in}}, \lambda) \cdot {\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) \cdot ({\color{blue}\vec\omega_{in}} \cdot \vec{n}) d{\color{blue}\vec\omega_{in}}
+\end{equation*}
+\hspace*{-0.5cm}
+\pause
+\begin{itemize}
+\item \begin{math}{\color{magenta}L_{out}}\end{math} -- яркость (radiance) света, выходящего из точки \begin{math}p\end{math} в направлении \begin{math}{\color{magenta}\vec\omega_{out}}\end{math} с длиной волны \begin{math}\lambda\end{math}
+\pause
+\item \begin{math}L_{e}\end{math} -- яркость (radiance) света, излучаемого поверхностью из точки \begin{math}p\end{math} в направлении \begin{math}{\color{magenta}\vec\omega_{out}}\end{math} с длиной волны \begin{math}\lambda\end{math}
+\pause
+\item \begin{math}{\color{blue}L_{in}}\end{math} -- яркость (radiance) света, приходящего в точку \begin{math}p\end{math} из направления \begin{math}{\color{blue}\vec\omega_{in}}\end{math} с длиной волны \begin{math}\lambda\end{math}
+\pause
+\item \begin{math}{\color{green}f}\end{math} -- функция, определяющая, сколько света с длиной волны \begin{math}\lambda\end{math}, пришедшего из направления \begin{math}{\color{blue}\vec\omega_{in}}\end{math}, отразится в направлении \begin{math}{\color{magenta}\vec\omega_{out}}\end{math}
+\pause
+\item \begin{math}\vec n\end{math} -- нормаль (перпендикуляр) к поверхности в точке \begin{math}p\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Материал}
+\begin{itemize}
+\item \begin{math}{\color{green}f}\end{math} определяет \textit{материал} объекта
+\pause 
+\item Абсолютно чёрное тело: \begin{math}{\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = 0\end{math}
+\pause
+\item Идеальное зеркало: \begin{math}{\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = \delta({R_{\vec n}(\color{blue}\vec\omega_{in}}) - {\color{magenta}\vec\omega_{out}})\end{math}
+\begin{itemize}
+\item \begin{math}R\end{math} -- отраженный вектор: \begin{math}R_{\vec n}(\vec \omega) = 2\vec n \cdot (\vec n \cdot \vec \omega) - \vec \omega\end{math}
+\end{itemize}
+\pause
+\item Старое зеркало: \begin{math}{\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = \left(R_{\vec n}({\color{blue}\vec\omega_{in}})\cdot{\color{magenta}\vec\omega_{out}}\right)^7\end{math}
+\pause
+\item Диффузная поверхность: \begin{math}{\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = 1\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Цвет}
+\begin{itemize}
+\item Зависимость \begin{math}{\color{green}f}\end{math} от \begin{math}\lambda\end{math} обеспечивает цвет объектов
+\pause
+\item Мы видим свет, отражённый объектом
+\pause
+\item Объект синего цвета не отражает красный цвет (кажется чёрным при освещении красным светом)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BRDF, BTDF, BSDF}
+\begin{itemize}
+\item Если \begin{math}{\color{green}f}\end{math} только отражает свет, её называют \textbf{BRDF}: Bidirectional Reflectance Distribution Function
+\pause 
+\item Если \begin{math}{\color{green}f}\end{math} только преломляет свет, её называют \textbf{BTDF}: Bidirectional Transmittance Distribution Function
+\pause 
+\item В общем случае её называют \textbf{BSDF}: Bidirectional Scattering Distribution Function
+\pause 
+\item \textbf{BxDF} -- обозначение для любого из вариантов выше
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BSDF}
+\begin{itemize}
+\item BSDF неотрицательна: \begin{math}{\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda)\geq 0\end{math}
+\pause
+\item Обычно BSDF предполагается нормированной: тело не может отразить больше света, чем пришло
+\begin{equation*}
+\int\limits_{\mathbb S^2} {\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda)({\color{blue}\vec\omega_{in}} \cdot \vec{n}) d{\color{blue}\vec\omega_{in}} \leq 1
+\end{equation*}
+\pause
+\item Иногда нормированность нарушается -- например, если BSDF имеет слишком сложную формулу, или задана неявно
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BSDF}
+\begin{itemize}
+\item Helmholtz reciprocity:
+\begin{equation*}
+{\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = {\color{green}f}(p, {\color{magenta}\vec\omega_{out}}, {\color{blue}\vec\omega_{in}}, \lambda)
+\end{equation*}
+\pause
+\item Другими словами, если свет прошёл по какому-то пути в одну сторону (в т.ч. отразился от нескольких поверхностей), то он мог пройти и в обратную сторону вдоль такого же пути с такими же коэффициентами отражения
+\pause
+\item Мы уже неявно используем этот принцип, пуская лучи в сторону, \textit{из которой} мог прийти свет (вместо того, чтобы симулировать прямое распространение света)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BSDF}
+\begin{itemize}
+\item Комбинация набора BSDF \begin{math}\{{\color{green}f_i}\}\end{math} -- тоже BSDF:
+\begin{equation*}
+{\color{green}\mu_i} \geq 0, \sum {\color{green}\mu_i} \leq 1 \Rightarrow \sum {\color{green}\mu_i f_i}
+\end{equation*}
+\pause
+\item Часто материалы описываются, как комбинация более простых BSDF
+\pause
+\item Некоторые BSDF невозможно описать функцией -- например, идеальное зеркало или идеальное стекло, -- в этом случае формально они описываются \textit{обобщёнными функциями} в духе дельта-функции Дирака \begin{math}\delta(\omega)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Уравнение рендеринга}
+\begin{itemize}
+\item Откуда взять \begin{math}{\color{blue}L_{in}}\end{math}? \pause Ответ: это чей-то \begin{math}{\color{magenta}L_{out}}\end{math} 
+\end{itemize}
+\begin{center}
+\begin{tikzpicture}
+\draw[black,thick] (0.0, 0.0) -- (10.0, 0.0);
+\draw[black,thick] (0.0, 0.0) -- (0.0, 6.0);
+
+\node[] at (0.0, 3.0) {\begin{math}{\color{magenta}\bullet}\end{math}};
+\node[] at (6.0, 0.0) {\begin{math}{\color{blue}\bullet}\end{math}};
+
+\node[] at (-0.5, 3.0) {\begin{math}{\color{magenta}L_{out}}\end{math}};
+\node[] at (0.5, 3.5) {\begin{math}{\color{magenta}\vec\omega_{out}}\end{math}};
+\node[] at (6.0, -0.5) {\begin{math}{\color{blue}L_{in}}\end{math}};
+\node[] at (6.5, 0.5) {\begin{math}{\color{blue}\vec\omega_{in}}\end{math}};
+
+\draw[magenta,thick,-stealth] (0.5, 2.75) -- (2.0, 2.0);
+\draw[blue,thick,-stealth] (4.0, 1.0) -- (5.5, 0.25);
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Уравнение рендеринга}
+\begin{itemize}
+\item Интегральное уравнение для каждой точки каждой поверхности сцены
+\pause
+\item Включает зависимость от материала объектов в каждой точке
+\pause
+\item Геометрия сцены связывает уравнения для разных точек
+\pause
+\item Обычно вместо всех возможных значений \begin{math}\lambda\end{math} берут дискретный набор ({\color{red}красный}, {\color{green}зелёный}, {\color{blue}синий})
+\pause
+\item \textbf{\alert{N.B.}}: \textit{Spectral rendering} -- область, в которой уравнение решают для произвольных распределений яркости по длинам волн
+\pause
+\item В общем случае задача решения этого уравнения называется \textit{Global Illumination} (GI)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Как решать уравнение рендеринга?}
+\begin{itemize}
+\item Real-time, low-quality подход: тонна дешёвых аппроксимаций
+\pause
+\item Offline, high-quality подход: придётся что-то дискретизировать
+\pause
+\begin{itemize}
+\item Дискретизация пространства: алгоритм \textit{radiosity}
+\pause
+\item Дискретизация домена интегрирования (сферы/полусферы) + трассировка лучей
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Алгоритм radiosity}
+\begin{itemize}
+\item Взять в качестве переменных среднюю освещённость в каждой вершине сцены, интерполировать освещённость в треугольниках, свести к системе линейных уравнений
+\pause
+\item Требует вычислить влияние каждого треугольника на каждый с учётом видимости (сложная геометрическая задача)
+\pause
+\item Обычно решается итеративными методами (Якоби, Гаусса-Зейделя)
+\pause
+\item Каждая итерация учитывает ещё одно возможное отражение света (bounce) перед попаданием в камеру
+\pause
+\item Плохо подходит для динамических сцен, но позволяет предподсчитать GI для статической сцены
+\pause 
+\item Дискретизация пространства не позволяет получить картинку максимального качества
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Raytracing + дискретизация интеграла}
+\begin{itemize}
+\item Пошлём луч из камеры в сторону пикселя, симулируя обратное распространение света (\textit{raytracing})
+\pause
+\item В точке пересечения луча с объектом сцены будем аппроксимировать интеграл, рекурсивно пуская отражённые лучи в некотором наборе из \begin{math}N\end{math} направлений
+\pause
+\item Потенциально бесконечная рекурсия \begin{math}\Longrightarrow\end{math} ограничим количество отражений максимальной глубиной рекурсии \begin{math}D\end{math}
+\pause
+\item Можем получать всё более и более качественные картинки, увеличивая \begin{math}N\end{math} и \begin{math}D\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Raytracing + дискретизация интеграла: проблемы}
+\begin{itemize}
+\item Сложность алгоритма для вычисления одного пикселя: \begin{math}N^D\end{math}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Увеличение \begin{math}N\end{math} или \begin{math}D\end{math} \textit{очень сильно} увеличивает время выполнения
+\pause
+\item Для интегрирования лучше подходит набор из равномерно распределённых направлений
+\pause
+\item \begin{math}\Longrightarrow\end{math} Нельзя остановить алгоритм посередине и ожидать разумный результат
+\pause
+\item \begin{math}\Longrightarrow\end{math} Нельзя продолжить алгоритм после его завершения (посчитать ещё чуть-чуть) -- для каждого \begin{math}N\end{math} нужно заново подбирать набор направлений
+\pause
+\item \alert{\textbf{N.B.}}: Последнее можно обойти с помощью \textit{blue noise sequences}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Raytracing + Монте-Карло интегрирование}
+\begin{itemize}
+\item Вместо вычисления интеграла в наборе фиксированных направлений, давайте вычислять его в \textit{случайных} направлениях
+\pause
+\item На каждый пиксель посылаем \begin{math}N\end{math} лучей
+\pause
+\item При пересечении луча со сценой посылаем один отражённый луч в \textit{случайном} направлении
+\pause
+\item Ограничиваем рекурсию максимальной глубиной \begin{math}D\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Raytracing + Монте-Карло интегрирование: плюсы}
+\begin{itemize}
+\item Сложность вычисления цвета пикселя -- \begin{math}N\cdot D\end{math} -- \textit{линейная} по \begin{math}N\end{math} и по \begin{math}D\end{math}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Понятная и предсказуемая скорость выполнения
+\pause
+\item Можно послать часть лучей, посмотреть на результат, при необходимости послать ещё лучей
+\pause
+\item \begin{math}\Longrightarrow\end{math} Удобно оценивать на предварительный результат
+\pause
+\item \begin{math}\Longrightarrow\end{math} Можно добавить ещё лучей при неудовлетворительном результате
+\pause
+\item \textit{Основной алгоритм}, использующийся сегодня для фотореалистичной графики
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Монте-Карло интегрирование}
+\begin{itemize}
+\item Хотим вычислить интеграл
+\begin{equation*}
+\int\limits_a^b f(x)dx
+\end{equation*}
+\pause
+\item Сгенерируем набор из \begin{math}N\end{math} случайных равномерно распределённых точек \begin{math}X_i \sim U(a,b)\end{math} на отрезке \begin{math}[a, b]\end{math}
+\pause
+\item Аппроксимируем интеграл как
+\begin{equation*}
+\frac{b-a}{N}\sum f(X_i)
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Монте-Карло: происхождение названия}
+\begin{itemize}
+\item Сам метод (и его более крутую вариацию -- Markov chain Monte Carlo) разработали Джон фон Нейман и Станислав Улам в рамках проекта Манхэттен
+\pause
+\item Для метода, как и для любой секретной разработки, нужно было кодовое имя
+\pause
+\item Николас Метрополис (алгоритм Метрополиса-Гастингса) предложил назвать метод в честь казино Монте Карло в Монако, где часто растрачивал деньги дядя Станислава Улама
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Монте-Карло интегрирование: мат.ожидание}
+\begin{itemize}
+\item Почему этот метод работает? \pause Вычислим мат.ожидание аппроксимирующей величины
+\begin{gather*}
+\mathbb{E}\left[\frac{b-a}{N}\sum f(X_i)\right] = \frac{b-a}{N}\sum\mathbb{E}[f(X_i)] = \\
+= (b-a)\mathbb{E}[f(X_1)] = (b-a)\int\limits_a^b f(x)p(x)dx = \\
+= (b-a)\int\limits_a^b f(x)\frac{1}{b-a}dx = \int\limits_a^b f(x)dx
+\end{gather*}
+\pause
+\item \begin{math}\Longrightarrow\end{math} \textit{В среднем} мы получим искомую величину
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Монте-Карло интегрирование: дисперсия}
+\begin{itemize}
+\item Почему метод сходится к искомой величине при \begin{math}N\rightarrow \infty\end{math}? \pause Вычислим дисперсию аппроксимирующей величины
+\begin{gather*}
+\operatorname{Var}\left[\frac{b-a}{N}\sum f(X_i)\right] = \left(\frac{b-a}{N}\right)^2\sum\operatorname{Var}[f(X_i)] = \\
+= \left(\frac{b-a}{N}\right)^2 N\operatorname{Var}[f(X_1)] = \frac{(b-a)^2}{N}\sigma^2
+\end{gather*}
+\pause
+\item Здесь, \begin{math}\sigma^2 = \operatorname{Var}[f(X_1)]\end{math} не зависит от \begin{math}N\end{math}
+\pause
+\item Среднеквадратичное отклонение: \begin{math}\frac{b-a}{\sqrt N}\sigma\end{math}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Ошибка метода уменьшается как \begin{math}\frac{1}{\sqrt N}\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Произвольное распределение}
+\begin{itemize}
+\item Вместо равномерного распределения \begin{math}U(a,b)\end{math} можно взять любое \textit{абсолютно непрерывное} распределение \begin{math}p(x)\end{math} на отрезке \begin{math}[a,b]\end{math}, такое что \begin{math}f(x)\neq 0 \Rightarrow p(x)\neq 0\end{math}
+\pause
+\item Тогда интеграл аппроксимируется как
+\begin{equation*}
+\frac{1}{N}\sum \frac{f(X_i)}{p(X_i)}
+\end{equation*}
+\pause
+\item Доказательство сходимости почти не меняется
+\pause
+\item Зачем это делать, обсудим на следующей лекции
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Дискретное распределение}
+\begin{itemize}
+\item Дискретные распределения \textbf{не подходят} для Монте-Карло интегрирования: они дадут только набор значений в фиксированных точках, и не будут сходиться к искомому интегралу
+\pause
+\item Даже смесь (аффинная комбинация) дискретного и непрерывного распределений тоже \textbf{не подходит}
+\pause
+\item Тем не менее, иногда мы будем их использовать, когда наша BRDF сама является обобщённой функцией (например, для идеальных отражений)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Произвольное множество}
+\begin{itemize}
+\item Конечно, вместо отрезка \begin{math}[a,b]\end{math} можно интегрировать по любому ограниченному множеству/многообразию, любой размерности
+\pause
+\item Главное -- уметь генерировать семплы \begin{math}X_i\end{math} какого-то (лучше -- равномерного) распределения вероятности \begin{math}p(x)\end{math} на этом множестве
+\pause
+\item Формула при этом вообще не меняется:
+\begin{equation*}
+\frac{1}{N}\sum \frac{f(X_i)}{p(X_i)}
+\end{equation*}
+\pause
+\item (размер множества учитывается автоматически в \begin{math}p(x)\end{math})
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Random number generators (RNG)}
+\begin{itemize}
+\usemintedstyle{solarized-light}
+\item Обычно в основе генерации случайных значений лежит \textit{генератор случайных битов} (в C++ это концепт \mintinline{cpp}|std::uniform_random_bit_generator|)
+\pause
+\item Некоторые такие генераторы (напр. \mintinline{cpp}|std::mersenne_twister_engine| и \mintinline{cpp}|std::subtract_with_carry_engine| в C++) заточены под максимизацию случайности, и потому имеют большое состояние и сложные функции генерации (размер состояния \mintinline{cpp}|std::mt19937| составляет 5 килобайт)
+\pause
+\item Некоторые, наоборот, имеют очень маленькое состояние и быструю генерацию, но менее случайный результат (например, \mintinline{cpp}|std::linear_congruential_engine| в C++)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Random number generators (RNG)}
+\begin{itemize}
+\usemintedstyle{solarized-light}
+\item Для Монте-Карло интегрирования нам гораздо важнее скорость, а слишком большая случайность, наоборот, увеличивает variance (и ошибку интегрирования)
+\pause
+\item Советую в C++ взять \mintinline{cpp}|std::minstd_rand|, или самим реализовать PCG генератор отсюда: \href{https://www.pcg-random.org/download.html}{\texttt{pcg-random.org/download.html}} -- его код умещается в 6 строк
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Генерация случайных семплов}
+\begin{itemize}
+\item Будем считать, что мы умеем генерировать сэмплы \begin{math}U(0,1)\end{math} (равномерное) и \begin{math}\mathcal{N}(0,1)\end{math} (нормальное)
+\pause
+\item Как сгенерировать произвольное распределение на произвольном множестве?
+\pause
+\item Несколько способов:
+\pause
+\begin{itemize}
+\item Inversion sampling (CDF inversion)
+\item Rejection sampling
+\item Применение какого-нибудь преобразования
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Inversion sampling}
+\begin{itemize}
+\item Хотим научиться генерировать семплы одномерной случайной величины \begin{math}Y\end{math}, заданной функцией распределения \begin{math}F_Y(y)\end{math}
+\pause
+\item Сгенерируем \begin{math}X\sim U(0,1)\end{math} и положим \begin{math}Y = F_Y^{-1}(X)\end{math}
+\pause
+\item Доказательство того, что это работает:
+\begin{equation*}
+P(y < Y) = P(y < F_Y^{-1}(X)) = P(F_Y(y) < X) = F_Y(y)
+\end{equation*}
+\pause
+\item Подходит, если \begin{math}F_Y^{-1}\end{math} легко вычислить
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Inversion sampling: пример}
+\begin{itemize}
+\item Равномерное распределение на \begin{math}[a, b]\end{math}:
+\begin{gather*}
+p_Y(y) = \frac{1}{b-a} \\
+F_Y(y) = \frac{y-a}{b-a} \\
+F_Y^{-1}(x) = a + (b-a)x
+\end{gather*}
+\pause
+\item Показательное распределение:
+\begin{gather*}
+p_Y(y) = \lambda\exp(-\lambda y) \\
+F_Y(y) = 1 - \exp(-\lambda y) \\
+F_Y^{-1}(x) = -\frac{1}{\lambda}\ln(1-x)
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Rejection sampling}
+\begin{itemize}
+\item Хотим научиться генерировать семплы равномерно в некотором сложно устроенном множестве \begin{math}A \subset \mathbb R^n\end{math}
+\pause
+\item Пусть, мы умеем проверять, что точка принадлежит множеству \begin{math}x \in A\end{math}
+\pause
+\item Пусть, мы умеем генерировать семплы равномерно для некоторого объемлющего множества \begin{math}B\supset A\end{math}
+\pause
+\item Алгоритм:
+\pause
+\begin{itemize}
+\item 1. Генерируем точку \begin{math}X \sim U(B)\end{math}
+\pause
+\item 2. Если \begin{math}X \in A\end{math}, возвращаем \begin{math}X\end{math}, иначе возвращаемся к пункту 1
+\end{itemize}
+\pause
+\item Точка из \begin{math}U(B)\end{math} принадлежит \begin{math}A\end{math} с вероятностью \begin{math}\frac{|A|}{|B|}\end{math}
+\pause
+\item \begin{math}\Longrightarrow\end{math} В среднем нам понадобится \begin{math}\frac{|B|}{|A|}\end{math} итераций цикла
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Rejection sampling: пример}
+\begin{itemize}
+\item Хотим сгенерировать точку внутри единичного круга \begin{math}B^2 \subset \mathbb{R}^2\end{math}
+\pause
+\item Будем генерировать точку внутри квадрата \begin{math}(X,Y) \in [-1, 1]^2\end{math}, каждая координата -- равномерное на \begin{math}[-1, 1]\end{math} распределение
+\pause
+\item Точка лежит в круге, если \begin{math}X^2+Y^2\leq 1\end{math}
+\pause
+\item Вероятность попасть в круг: \begin{math}\frac{|B^2|}{|[-1,1]^2|}=\frac{\pi}{4}\approx 0.78\end{math}
+\pause
+\item Среднее число попыток: \begin{math}\frac{4}{\pi}\approx 1.27\end{math}
+\pause
+\item \alert{\textbf{N.B.}}: Метод работает и для \begin{math}B^n\subset \mathbb R^n\end{math}, но вероятность попасть в шар \begin{math}\frac{\pi^{n/2}}{2^n \Gamma(\frac{n}{2}+1)}\end{math} стремится к нулю (и число попыток -- к бесконечности)
+\pause
+\item \alert{\textbf{N.B.}}: Для \begin{math}B^3\end{math} вероятность будет \begin{math}\frac{\pi}{6}\approx 0.52\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения}
+\begin{itemize}
+\item Пусть у нас есть некоторая одномерная случайная величина \begin{math}X\end{math} с распределением вероятности \begin{math}p_X(x)\end{math}
+\pause
+\item Применим к нему некоторую биективную функцию \begin{math}G\end{math} и получим новую величину \begin{math}Y = G(X)\end{math}
+\pause
+\item Тогда её распределение вероятности равно
+\begin{equation*}
+p_Y(y) = p_X(G^{-1}(y))\left|\frac{d}{dy}G^{-1}(y)\right|
+\end{equation*}
+\pause
+\item \alert{\textbf{N.B.}}: Модуль нужен, чтобы учесть убывающие функции
+\pause
+\item \alert{\textbf{N.B.}}: Если функция не биективна, нужно просуммировать по всем точкам прообраза \begin{math}G^{-1}(\{y\})\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: пример}
+\begin{itemize}
+\item Возьмём \begin{math}X\sim U(0,1)\end{math} и \begin{math}G(x) = x^2\end{math}
+\pause
+\item Вычислим \begin{equation*}G^{-1}(y) = \sqrt y\end{equation*}
+\pause
+\item Вычислим \begin{equation*}\frac{d}{dy}G^{-1}(y) = \frac{1}{2\sqrt y}\end{equation*}
+\pause
+\item В итоге \begin{equation*}p_Y(y) = p_X(\sqrt y)\frac{1}{2\sqrt y} = \frac{1}{2\sqrt y}\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: многомерный случай}
+\begin{itemize}
+\item Пусть у нас есть некоторая случайная величина \begin{math}X\end{math} заданная на подмножестве \begin{math}\mathbb R^n\end{math} с распределением вероятности \begin{math}p_X(x)\end{math}
+\pause
+\item Применим к ней некоторую биективную функцию \begin{math}G\end{math} и получим новую величину \begin{math}Y = G(X)\end{math}
+\pause
+\item Тогда её распределение вероятности равно
+\begin{equation*}
+p_Y(y) = p_X(G^{-1}(y))\left|\det \operatorname J(G^{-1}(y))\right|
+\end{equation*}
+\pause
+\item Здесь, \begin{math}\operatorname J\end{math} -- якобиан функции
+\pause
+\item \alert{\textbf{N.B.}}: Вместо определителя якобиана обратной функции, можно вычислять обратный определитель якобиана прямого преобразования:
+\begin{equation*}
+\det \operatorname J (G^{-1}) = \det \left(\operatorname J G\right)^{-1} = \left(\det \operatorname J G\right)^{-1}
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: многомерный пример}
+\begin{itemize}
+\item Сгенерируем точку на двумерном единичном диске, взяв равномерные угол \begin{math}\Phi\sim U(0,2\pi)\end{math} и расстояние до центра \begin{math}R\sim U(0,1)\end{math}
+\pause
+\item Координаты точки на диске: \begin{equation*}G(r,\phi) = (r\cos\phi, r\sin\phi)\end{equation*}
+\pause
+\item Якобиан \begin{math}\operatorname J G\end{math}:
+\begin{equation*}
+\begin{pmatrix}
+\cos\phi & \sin\phi \\
+-r\sin\phi & r\cos\phi
+\end{pmatrix}
+\end{equation*}
+\pause
+\item Определитель: \begin{math}\det \operatorname J G = r\end{math}
+\pause
+\item Определитель обратного преобразования: \begin{math}\det \operatorname J(G^{-1}) = \frac{1}{r}\end{math}
+\pause
+\item Итог: \begin{equation*}p_Y(r,\phi) = p_X(G^{-1}(r, \phi)) \frac{1}{r} = \frac{1}{r}\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: многомерный пример}
+\begin{itemize}
+\item Итог: \begin{equation*}p_Y(r,\phi) = \frac{1}{r}\end{equation*}
+\pause
+\item При таком способе получается \textit{неравномерное} распределение на диске: точки, близкие к центру, имеют бóльшую плотность вероятности
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: многомерный пример №2}
+\begin{itemize}
+\item Сгенерируем точку на двумерном единичном диске, взяв равномерный угол \begin{math}\Phi\sim U(0,2\pi)\end{math} и \textit{квадрат} расстояния до центра \begin{math}R^2\sim U(0,1)\end{math}
+\pause
+\item Другими словами, возьмём \begin{math}U_1, U_2 \sim U(0,1)\end{math} и положим \begin{math}R = \sqrt{U_1}\end{math} и \begin{math}\Phi = 2\pi U_2\end{math} 
+\pause
+\item Координаты точки на диске: \begin{equation*}G(u_1, u_2) = (\sqrt{u_1}\cos 2\pi u_2, \sqrt{u_1}\sin 2\pi u_2)\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: многомерный пример №2}
+\begin{itemize}
+\item Якобиан \begin{math}\operatorname J G\end{math}:
+\begin{equation*}
+\begin{pmatrix}
+\frac{1}{2\sqrt{u_1}}\cos 2\pi u_2 & \frac{1}{2\sqrt{u_1}}\sin 2\pi u_2 \\
+-2\pi\sqrt{u_1}\sin 2\pi u_2 & 2\pi\sqrt{u_1}\cos 2\pi u_2
+\end{pmatrix}
+\end{equation*}
+\pause
+\item Определитель: \begin{math}\det \operatorname J G = \pi\end{math}
+\pause
+\item Определитель обратного преобразования: \begin{math}\det \operatorname J(G^{-1}) = \frac{1}{\pi}\end{math}
+\pause
+\item Итог: \begin{equation*}p_Y(u_1, u_2) = p_X(G^{-1}(u_1, u_2)) \frac{1}{\pi} = \frac{1}{\pi}\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: многомерный пример №2}
+\begin{itemize}
+\item Итог: \begin{equation*}p_Y(u_1, u_2) = \frac{1}{\pi}\end{equation*}
+\pause
+\item Мы получили равномерное распределение на диске!
+\pause
+\item Множитель \begin{math}\frac{1}{\pi}\end{math} ожидаем: при преобразовании из равномерного распределения на множестве \begin{math}A\end{math} в равномерное на множестве \begin{math}B\end{math} плотность вероятности должна умножиться на \begin{math}\frac{|A|}{|B|}\end{math}, чтобы остаться нормированной
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: многомерный пример №3}
+\begin{itemize}
+\item Возьмём \begin{math}U_1, U_2 \sim U(0,1)\end{math} и преобразуем их как
+\begin{equation*}
+G(u_1, u_2) = (\sqrt{-2\ln u_1}\cos 2\pi u_2, \sqrt{-2\ln u_1}\sin 2\pi u_2)
+\end{equation*}
+\pause
+\item Тогда
+\begin{equation*}
+x^2+y^2 = -2\ln u_1 \Longrightarrow u_1 = \exp\left(-\frac{x^2+y^2}{2}\right)
+\end{equation*}
+\pause
+\item Якобиан:
+\begin{equation*}
+\operatorname J G = \begin{pmatrix}
+-\frac{1}{u_1 \sqrt{-2\ln u_1}}\cos 2\pi u_2 & -\frac{1}{u_1 \sqrt{-2\ln u_1}}\sin 2\pi u_2 \\
+-2\pi\sqrt{-2\ln u_1} \sin 2\pi u_2 & 2\pi\sqrt{-2\ln u_1} \cos 2\pi u_2
+\end{pmatrix}
+\end{equation*}
+\pause
+\item Определитель:
+\begin{equation*}
+|\det \operatorname J G| = \left|-\frac{2 \pi}{u_1}\right|
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Преобразование распределения: многомерный пример №3}
+\begin{itemize}
+\item Определитель обратного преобразования:
+\begin{equation*}
+|\det \operatorname J G^{-1}| = \frac{u_1}{2 \pi}
+\end{equation*}
+\pause
+\item Итог:
+\begin{equation*}
+p(x,y) = \frac{1}{2\pi}\exp\left(-\frac{x^2+y^2}{2}\right) = \left[\frac{1}{\sqrt{2\pi}}\exp\left(-\frac{x^2}{2}\right)\right] \cdot \left[\frac{1}{\sqrt{2\pi}}\exp\left(-\frac{y^2}{2}\right)\right]
+\end{equation*}
+\pause
+\item \begin{math}\Longrightarrow\end{math} \begin{math}X\end{math} и \begin{math}Y\end{math} независимы, и имеют стандартное нормальное распределение
+\pause
+\item Это стандартный алгоритм Бокса-Мюллера для генерации нормального распределения
+\pause
+\item \alert{\textbf{N.B.}}: Обычно используют вариацию -- т.н. Marsaglia polar method -- использующую только одну трансцендентную функцию \begin{math}\ln\end{math} + rejection sampling в единичном круге (вероятность попасть -- \begin{math}\frac{\pi}{4}\end{math})
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Генерация случайных семплов}
+\begin{itemize}
+\item Есть очень много более продвинутых методов:
+\begin{itemize}
+\item Ratio of uniforms
+\item Ziggurat sampling
+\item Adaptive rejection sampling
+\item Metropolis-Hastings algorithm
+\item Gibbs sampling
+\item ..и другие
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Генерация случайных семплов: единичная сфера}
+\begin{itemize}
+\item Для вычисления освещённости ламбертовых поверхностей нам нужно уметь генерировать случайный вектор на единичной \textit{полусфере} вокруг вектора нормали \begin{math}N\end{math}
+\pause
+\item Проще всего сгенерировать случайный вектор \begin{math}\omega\end{math} на единичной \textit{сфере}, и обратить его, если он смотрит не в ту сторону: \begin{math}\omega \mapsto -\omega\end{math} если \begin{math}N\cdot \omega < 0\end{math}
+\pause
+\item Как сгенерировать вектор на единичной сфере? \pause Есть много способов:
+\begin{itemize}
+\item Rejection sampling в единичном шаре + проекция
+\item 3D normal distribution + проекция
+\item Проекция с цилиндра
+\item Явное обращение CDF
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Единичная сфера: rejection sampling}
+\begin{itemize}
+\item Сгенерируем точку равномерно в \begin{math}[-1,1]^3\end{math}
+\pause
+\item Если \begin{math}|V|^2 = X^2+Y^2+Z^2\leq 1\end{math}, возвращаем \begin{math}\frac{V}{|V|}\end{math}
+\pause
+\item Иначе, возвращаемся к первому пункту (это произойдёт с вероятностью \begin{math}\sim0.48\end{math})
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Единичная сфера: normal + проекция}
+\begin{itemize}
+\item Сгенерируем все три координаты как \begin{math}X,Y,Z\sim \mathcal N(0,1)\end{math}
+\pause
+\item Тогда плотность вероятности \begin{equation*}p(x,y,z)=\frac{1}{(2\pi)^{3/2}}\exp\left(-\frac{x^2+y^2+z^2}{2}\right)=\frac{1}{(2\pi)^{3/2}}\exp\left(-\frac{r^2}{2}\right)\end{equation*} зависит только от расстояния, и равномерна по направлению
+\pause
+\item Возвращаем \begin{math}\frac{V}{|V|}\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Проекция с цилиндра}
+\begin{itemize}
+\item Сгенерируем точку на цилиндре с равномерными углом \begin{math}\Phi \sim U(0,2\pi)\end{math} и высотой \begin{math}Z\sim U(-1,1)\end{math}
+\pause
+\item Спроецируем её на поверхность сферы параллельно плоскости XY:
+\begin{gather*}
+x = \sqrt{1-z^2}\cos\phi \\
+y = \sqrt{1-z^2}\sin\phi
+\end{gather*}
+\pause
+\item По теореме Архимеда о шаре и цилиндре получается равномерное распределение
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Явное обращение CDF в сферических координатах}
+\begin{itemize}
+\item Сгенерируем две равномерных величины \begin{math}U_1,U_2\sim U(0,1)\end{math} и положим
+\begin{gather*}
+\Phi = \cos^{-1}(2U_1-1) \\
+\Theta = 2\pi U_2
+\end{gather*}
+\pause
+\item Используем \begin{math}(\phi,\theta)\end{math} как сферические координаты точки
+\pause
+\item Вывод смотри в \href{https://www.bogotobogo.com/Algorithms/uniform_distribution_sphere.php}{\texttt{этой статье}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Единичная (полу)сфера}
+\begin{itemize}
+\item Можете использовать любой понравившийся способ
+\pause
+\item В любом случае плотность вероятности случайного вектора на единичной \textit{сфере} равна \begin{math}\frac{1}{4\pi}\end{math}
+\pause
+\item Плотность вероятности случайного вектора на единичной \textit{полусфере} равна \begin{math}\frac{1}{2\pi}\end{math}
+\pause
+\item Это будет важно для правильных коэффициентов Монте-Карло интегрирования
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Монте-Карло интегрирование + raytracing}
+\begin{itemize}
+\item Итак, общий алгоритм вычисления изображения с помощью трассировки лучей и Монте-Карло интегрирования для решения уравнения рендеринга таков:
+\pause
+\begin{itemize}
+\item Генерируем луч из камеры в центр пикселя в направлении \begin{math}d\end{math}
+\pause
+\item Вычисляем пересечение луча со сценой
+\pause
+\item В точке пересечения вычисляем \begin{math}L_{out}(\omega)\end{math} (\begin{math}\omega=-d\end{math}) как сумму излучения объекта в этой точке \begin{math}L_e(\omega)\end{math} и интеграла от входящего излучения
+\pause
+\item Конкретный способ вычисления интеграла зависит от типа материала, но обычно сводится к Монте-Карло интегрированию \textbf{одним семплом}
+\pause
+\item Для вычисления значения в семплах рекурсивно пускаем дополнительные лучи
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Монте-Карло интегрирование: ламбертова поверхность}
+\begin{itemize}
+\item Ламбертова поверхность задаётся фиксированным цветом, и её BRDF константна \begin{math}f(p, \omega_{in}, \omega_{out}) = C\end{math}
+\pause
+\item Добавим фиксированное значение излучения (emission) во всех направлениях: \begin{math}L_e(\omega_{out}) = E\end{math}
+\pause
+\item Интеграл по входящему излучению выглядит как
+\begin{equation*}
+\int\limits_{\Omega(n)} C\cdot L_{in}(\omega)\cdot (\omega \cdot n) d\omega
+\end{equation*}
+\pause
+\item Аппроксимация интеграла одним семплом \begin{math}\omega\end{math} на единичной полусфере:
+\begin{equation*}
+\frac{f(\omega)}{p(\omega)} = 2\pi C \cdot L_{in}(\omega) \cdot (\omega \cdot n)
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ламбертова поверхность: алгоритм}
+\begin{itemize}
+\item Генерируем случайный вектор на единичной полусфере \begin{math}\omega \in \Omega(n)\end{math}
+\pause
+\item Вычисляем \begin{math}L_{in}(\omega)\end{math} рекурсивным вызовом
+\pause
+\item Возвращаем \begin{math}E + 2\pi C \cdot L_{in}(\omega) \cdot (\omega \cdot n)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ламбертова поверхность: нормализация}
+\begin{itemize}
+\item Нормализация BRDF требует, чтобы \begin{equation*}\int\limits_{\Omega(n)} C\cdot (\omega\cdot n) d\omega \leq 1\end{equation*}
+\pause
+\item Вычислим интеграл:
+\begin{equation*}\int\limits_{\Omega(n)} C\cdot (\omega\cdot n) d\omega = C\cdot\int\limits_{\Omega(n)} (\omega\cdot n) d\omega = C\cdot \pi\end{equation*}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Для ламбертовой поверхности, значение цвета (в каждом канале) не может быть больше чем \begin{math}\frac{1}{\pi}\end{math}, что соответствует идеально белой поверхности
+\pause
+\item Этим неудобно пользоваться, поэтому будем считать, что цвет задан как число \begin{math}C \in [0, 1]\end{math}, и для применения в интегрировании его нужно разделить на \begin{math}\pi\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ламбертова поверхность: финальная формула}
+\begin{itemize}
+\item С учётом нормализации цвета, получаем такую формулу
+\begin{equation*}
+E + 2\pi \frac{C}{\pi} \cdot L_{in}(\omega) \cdot (\omega \cdot n) = E + 2 C \cdot L_{in}(\omega) \cdot (\omega \cdot n)
+\end{equation*}
+\pause
+\item Эту формулу и \underline{надо использовать} в коде!
+\pause
+\item Мы умножили на \begin{math}2\pi\end{math}, чтобы учесть плотность вероятности семпла, и разделили на \begin{math}\pi\end{math} с учётом удобной нормализации цвета
+\pause
+\item Одна из самых частых ошибок в raytracing'е -- ошибиться с константами, -- например, с количеством раз, когда сократились домножения и деления на \begin{math}\pi\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ламбертова поверхность}
+\slideimage{cool.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Монте-Карло интегрирование: металлы}
+\begin{itemize}
+\item Ничего не меняется с прошлой лекции: металл отражает весь свет в строго определённом направлении, окрашивая его в свой цвет:
+\begin{equation*}
+L_{out}(\omega) = L_e(\omega) + C \cdot L_{in}(R_n(\omega))
+\end{equation*}
+\pause
+\item В этом случае, BRDF -- дельта-функция \begin{math}C \cdot \delta(\omega, R_n(\omega))\end{math}
+\pause
+\item Нормировка: \begin{math}C\leq 1\end{math}, никакого деления на \begin{math}\pi\end{math} \underline{не нужно}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Металл}
+\slideimage{cool3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Монте-Карло интегрирование: диэлектрики}
+\begin{itemize}
+\item Как в прошлой лекции, вычислим угол преломлённого луча \begin{math}\sin\theta_2\end{math} и коэффициент отражения Френеля \begin{math}R\end{math}
+\pause
+\item Если \begin{math}\sin\theta_2 > 1\end{math} -- полное внутреннее отражение, просто возвращаем отражённый свет
+\pause
+\item Иначе, нам нужно вернуть отражённый луч с весом \begin{math}R\end{math} и преломлённый луч с весом \begin{math}1-R\end{math}
+\pause
+\item Вместо того, чтобы вычислять два рекурсивных луча, бросим нечестную монетку: сгенерируем \begin{math}U \sim U(0,1)\end{math}
+\pause
+\begin{itemize}
+\item Если \begin{math}U < R\end{math}, возвращаем отражённый свет
+\pause
+\item Иначе возвращаем преломлённый свет
+\end{itemize}
+\pause
+\item Домножать возвращённый свет на \begin{math}R\end{math} или \begin{math}1-R\end{math} \underline{не нужно}: это автоматически учтётся за счёт вероятности этих случаев
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Диэлектрик}
+\slideimage{cool5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{White furnace test}
+\begin{itemize}
+\item Пусть идеально белая (\begin{math}C = 1\end{math}) диффузная выпуклая поверхность освещается идеально белым фоном
+\pause
+\item Тогда отражённый свет можно вычислить явно:
+\begin{equation*}
+L_{out}(\omega) = \frac{1}{\pi} \cdot \int\limits_{\Omega(n)} 1\cdot(\omega\cdot n) d\omega = \frac{1}{\pi} \cdot \pi = 1
+\end{equation*}
+\pause
+\item Отражённый свет -- идеально белый \begin{math}\Longrightarrow\end{math} мы \underline{не увидим} поверхность -- она сольётся с фоном
+\pause
+\item Такая ситуация называется \textit{white furnace test} и используется для тестирования алгоритмов рендеринга
+\pause
+\item То же самое получится для металлов и диэлектриков
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{White furnace test}
+\slideimage{white_furnace.png}
+\begin{center}\textit{Белая сфера на белом фоне}\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Сглаживание (anti-aliasing)}
+\begin{itemize}
+\item Из-за того, что мы посылаем лучи в центр пикселя, у нас остаётся один артефакт -- \textit{алиасинг} (лесенка из пикселей)
+\pause
+\item Монте-Карло интегрирование позволяет практически бесплатно получить сглаживание (\textit{анти-алиасинг})
+\pause
+\item Вместо центра пикселя возьмём случайную точку внутри пикселя: \begin{math}(x+u_1,y+u_2)\end{math} где \begin{math}U_1, U_2 \sim U(0,1)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Сглаживание (anti-aliasing)}
+\slideimage{antialiasing.png}
+\end{frame}
+
+\end{document}
