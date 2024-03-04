@@ -1,0 +1,774 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Лекция 4: Variance reduction, importance sampling, cosine-weighted sampling, light surface sampling, multiple importance sampling}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Об оптимизации рендеринга}
+\begin{itemize}
+\item Мы видели, что Монте-Карло интегрирование занимает очень много времени, если мы хотим получить качественную картинку
+\pause
+\item Хочется научиться оптимизировать процесс
+\pause
+\item Оптимизировать = получить картинку более высокого качества за то же время
+\pause
+\item Два варианта:
+\pause
+\begin{itemize}
+\item Ускорять вычисление каждого луча (следующая лекция)
+\pause
+\item Увеличивать качество каждого луча (эта лекция)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Variance reduction}
+\begin{itemize}
+\item Как увеличить качество луча?
+\pause
+\item Мы используем рандомизированный алгоритм, цвет луча -- случайная величина
+\pause
+\item Близость цвета луча к искомому цвету определяется дисперсией этой величины
+\pause
+\item \begin{math}\Longrightarrow\end{math} Надо уменьшать дисперсию!
+\pause
+\item Этот подход называется \textit{variance reduction}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Variance reduction}
+\begin{itemize}
+\item Вспомним формулу Монте-Карло интегрирования:
+\begin{equation*}
+I = \int\limits_\Omega f(x)dx \approx \frac{1}{N} \sum \frac{f(X_i)}{p(X_i)}
+\end{equation*}
+\pause
+\item Вычислим дисперсию одного семпла:
+\begin{gather*}
+\operatorname{Var}\frac{f(X)}{p(X)} = \mathbb{E}\left[\frac{f(X)^2}{p(X)^2}\right] - \mathbb{E}\left[\frac{f(X)}{p(X)}\right]^2 = \\
+= \int\limits_\Omega \frac{f(x)^2}{p(x)^2}p(x)dx - I^2 = \int\limits_\Omega \frac{f(x)^2}{p(x)}dx - I^2
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Variance reduction}
+\begin{itemize}
+\item Вычислим дисперсию одного семпла:
+\begin{equation*}
+\operatorname{Var}\frac{f(X)}{p(X)} = \int\limits_\Omega \frac{f(x)^2}{p(x)}dx - I^2
+\end{equation*}
+\pause
+\item Можно показать (напр. вариационным методом), что дисперсия минимизируется если
+\begin{equation*}
+p^*(x) \sim |f(x)| \Longrightarrow p^*(x) = \frac{|f(x)|}{\int |f(x)|dx}
+\end{equation*}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Поиск идеального распределения семплов сводится к интегрированию \begin{math}\pm\end{math} той же функции
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Variance reduction}
+\begin{itemize}
+\item В частности, если \begin{math}f\geq 0\end{math}, то 
+\begin{equation*}
+p^*(x) = \frac{f(x)}{\int f(x)dx} = \frac{f(x)}{I}
+\end{equation*}
+\pause
+\item Тогда любой семпл даст точное значение интеграла:
+\begin{equation*}
+\frac{f(x)}{p^*(x)} = f(x) \cdot \left[\frac{f(x)}{I}\right]^{-1} = I
+\end{equation*}
+\pause
+\item При этом дисперсия равна нулю:
+\begin{gather*}
+\operatorname{Var}\frac{f(X)}{p^*(X)} = \int\limits_\Omega \frac{f(x)^2}{p^*(x)}dx - I^2 = \int\limits_\Omega I\cdot f(x)dx - I^2 = I^2 - I^2 = 0
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Variance reduction}
+\begin{itemize}
+\item \alert{\textbf{N.B.}}: Если \begin{math}f\end{math} бывает как положительна, так и отрицательна, то даже с идеальным распределением \begin{math}p^*\end{math} дисперсия будет отличаться от нуля:
+\begin{gather*}
+\operatorname{Var}\frac{f(X)}{p^*(X)} = \int\limits_\Omega \frac{f(x)^2}{|f(x)|}\cdot I_{abs} dx - I^2 = I_{abs}^2 - I^2 \\
+I_{abs} = \int\limits_\Omega |f(x)|dx
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling}
+\begin{itemize}
+\item Итак, идеальное распределение для Монте-Карло интегрирования пропорционально искомой функции
+\pause
+\item Вычисление такого распределения сводится к искомому интегралу, и само по себе нам не помогает
+\pause
+\item Мысль: давайте брать распределение, в какой-то мере \textit{повторяющее форму} нашей искомой функции
+\pause
+\item Этот подход называется \textit{importance sampling}
+\pause
+\item Интуитивно: полезнее брать больше семплов там, где и функция больше, иначе мы делаем бесполезную работу
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling}
+\begin{itemize}
+\item Рассмотрим частный случай, когда функция \begin{math}A\rightarrow \mathbb R\end{math} равна нулю вне некоторого подмножества \begin{math}B\subset A\end{math}
+\pause
+\item Возьмём равномерные распределения \begin{math}p_A(x)=\frac{1}{|A|}\end{math} и \begin{math}p_B(x)=\frac{1}{|B|}\end{math} на множествах \begin{math}A\end{math} и \begin{math}B\end{math} соответственно
+\pause
+\item Тогда разность дисперсий равна
+\begin{gather*}
+\operatorname{Var}\frac{f(X)}{p_A(X)} - \operatorname{Var}\frac{f(X)}{p_B(X)} = \int\limits_B f(x)^2 \left(\frac{1}{p_A(x)} - \frac{1}{p_B(x)}\right)dx = \\
+= (|A| - |B|) \int\limits_B f(x)^2 dx
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling}
+\begin{itemize}
+\item Тогда разность дисперсий равна
+\begin{gather*}
+\operatorname{Var}\frac{f(X)}{p_A(X)} - \operatorname{Var}\frac{f(X)}{p_B(X)} = (|A| - |B|) \int\limits_B f(x)^2 dx
+\end{gather*}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Чем ближе носитель распределения к носителю функции, тем меньше дисперсия
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling: пример №1}
+\begin{itemize}
+\item Пусть мы интегрируем функцию \begin{math}f(x) = x^2 \cdot \mathbf{1}_{[1/2, 1]}(x)\end{math} на отрезке \begin{math}[0, 1]\end{math}:
+\begin{gather*}
+\int\limits_0^1f(x)dx = \int\limits_\frac{1}{2}^1 x^2dx = \frac{7}{24}\approx 0.2916
+\end{gather*}
+\pause
+\item Возьмём два распределения: равномерное на \begin{math}[0, 1]\end{math} и на \begin{math}[1/2. 1]\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling: пример №1}
+\slideimage{is_plot_1.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling: пример №2}
+\begin{itemize}
+\item Пусть мы интегрируем функцию \begin{math}f(x) = \sin x\end{math} на отрезке \begin{math}[0, \frac{\pi}{2}]\end{math}:
+\begin{gather*}
+\int\limits_0^\frac{\pi}{2} \sin x dx = 1
+\end{gather*}
+\pause
+\item Возьмём два распределения: равномерное на \begin{math}[0, \frac{\pi}{2}]\end{math} и линейно возрастающее на том же отрезке:
+\begin{gather*}
+p_1(x) = \frac{2}{\pi} \\
+p_2(x) = x \cdot \frac{8}{\pi^2} \\
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling: пример №2}
+\slideimage{is_plot_2.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling в вычислении освещённости}
+\begin{itemize}
+\item Наша интегрируемая функция выглядит как
+\begin{equation*}
+L_{in}(\omega_i) \cdot f(\omega_i, \omega_o) \cdot (\omega_i \cdot n)
+\end{equation*}
+\pause
+\item \begin{math}L_{in}(\omega_i)\end{math} зависит от геометрии сцены и освещённости других объектов
+\pause
+\item \begin{math}f(\omega_i, \omega_o) \cdot (\omega_i \cdot n)\end{math} зависит от материала объекта
+\pause
+\item В общем случае поиск подходящего распределения для произведения двух функций -- очень сложная задача
+\pause
+\item \begin{math}\Longrightarrow\end{math} Имеет смысл подобрать распределения для двух множителей по отдельности, и потом скомбинировать
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted distribution}
+\begin{itemize}
+\item Для ламбертовой поверхности \begin{math}f(\omega_i, \omega_o) = \operatorname{const}\end{math}, и нам достаточно подобрать распределение на полусфере, пропорциональное \begin{math}\omega_i \cdot n=\cos \theta\end{math}
+\pause
+\item Такое распределение называется \textit{cosine-weighted distribution} и идеально подходит для диффузных поверхностей
+\pause
+\item Есть разные способы его получить:
+\pause
+\begin{itemize}
+\item CDF inversion
+\item Проекция с диска
+\item Сдвиг единичной сферы
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted: CDF inversion}
+\begin{itemize}
+\item Берём два равномерных \begin{math}U_1,U_2 \sim U(0,1)\end{math}
+\pause
+\item Положим
+\begin{gather*}
+\Theta = \cos^{-1}(\sqrt U_1) \\
+\Phi = 2\pi U_2
+\end{gather*}
+\pause
+\item Тогда \begin{math}(\Theta,\Phi)\end{math} -- сферические координаты точки на полусфере с cosine-weighted распределением (в направлении Z)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted: проекция с диска}
+\begin{itemize}
+\item Генерируем точку \begin{math}(X,Y)\end{math} в единичном диске с равномерным распределением
+\pause
+\item Положим \begin{math}Z = \sqrt{1 - X^2 - Y^2}\end{math}
+\pause
+\item Тогда \begin{math}(X,Y,Z)\end{math} -- евклидовы координаты точки на полусфере с cosine-weighted распределением (в направлении Z)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted: сдвиг единичной сферы}
+\begin{itemize}
+\item Генерируем точку \begin{math}V = (X,Y,Z)\end{math} на единичной сфере с равномерным распределением
+\pause
+\item Положим \begin{math}V' = \frac{V + N}{\|V + N\|}\end{math}
+\pause
+\item Тогда \begin{math}V'\end{math} -- евклидовы координаты точки на полусфере с cosine-weighted распределением в направлении \begin{math}N\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted distribution}
+\begin{itemize}
+\item Первые два способа требуют конвертации из сферических в евклидовы координаты в локальной системе координат поверхности
+\pause
+\item Третий способ использует только вектор нормали, без необходимости восстанавливать локальный базис
+\pause
+\item Как обычно, можете использовать любой способ
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted importance sampling}
+\begin{itemize}
+\item Так как \begin{math}\int\limits_{\Omega(n)} (\omega \cdot n) d\omega = \pi\end{math}, плотность вероятности cosine-weighted распределения равна
+\begin{gather*}
+p(\omega) = \max\left(0, \frac{\omega\cdot n}{\pi}\right)
+\end{gather*}
+\pause
+\item Подставим в формулу Монте-Карло интегрирования диффузной поверхности:
+\begin{gather*}
+E + \frac{C}{\pi} \cdot \frac{L_{in}(\omega) \cdot (\omega \cdot n)}{p(\omega)} = E + \frac{C}{\pi} \cdot L_{in}(\omega) \cdot (\omega \cdot n) \cdot \frac{\pi}{\omega \cdot n} = \\
+= E + C \cdot L_{in}(\omega)
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted importance sampling}
+\begin{itemize}
+\item Формула Монте-Карло интегрирования диффузной поверхности с cosine-weighted распределением семплов:
+\begin{gather*}
+E + C \cdot L_{in}(\omega)
+\end{gather*}
+\pause
+\item \alert{\textbf{N.B.}}: \begin{math}\pi\end{math} в нормализации цвета сократилась с \begin{math}\pi\end{math} в плотности вероятности
+\pause
+\item \alert{\textbf{N.B.}}: Множителя \begin{math}2\end{math} нет, так как плотность теперь пропорциональна \begin{math}\frac{1}{\pi}\end{math}, а не \begin{math}\frac{1}{2\pi}\end{math}
+\pause
+\item \alert{\textbf{N.B.}}: Косинус угла \begin{math}\omega \cdot n\end{math} в интегрируемой функции сократился с косинусом из плотности вероятности (это ожидаемо -- мы специально подбирали плотность пропорциональную этому множителю)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted importance sampling: 64 семпла}
+\slideimage{cosine_64.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted importance sampling: 256 семплов}
+\slideimage{cosine_256.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cosine-weighted importance sampling: 1024 семпла}
+\slideimage{cosine_1024.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Incoming radiance sampling}
+\begin{itemize}
+\item Cosine-weighted распределение уменьшает дисперсию, но картинка всё ещё достаточно шумная
+\pause
+\item В искомой интегрируемой функции есть ещё один множитель: входящее количество света \begin{math}L_{in}(\omega_i)\end{math}
+\pause
+\item К сожалению, явный вид этой функции безумно сложен и зависит от всей сцены
+\pause
+\item ...но мы может попробовать какие-нибудь эвристики!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Direct light sampling}
+\begin{itemize}
+\item Свет, отраженный объектами, обычно гораздо слабее света, напрямую излучённого источниками света
+\pause
+\item \begin{math}\Longrightarrow\end{math} Давайте семплить направления на источники света!
+\pause
+\item Монте-Карло аналог \textit{теневого луча} из Whitted-style raytracing'а
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Direct light sampling}
+\begin{itemize}
+\item Нам нужно придумать какое-то распределение направлений на источник света
+\pause
+\item Пытаться равномерно семплить сами направления -- плохая идея: проекция объекта на сферу направлений может быть очень сложно устроена
+\pause
+\item Другой вариант -- семплить точки на поверхности источника света (например, равномерно) и превращать их в семплы направлений
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Равномерное распределение на плоскости}
+\begin{itemize}
+\item Как сгенерировать равномерное распределение на поверхности бесконечной плоскости? \pause Никак
+\pause
+\item Можно взять 2D нормальное распределение с центром в точке на плоскости, ближайшей к освещаемой точке
+\pause
+\item Можно придумать какое-нибудь распределение с учётом множителя \begin{math}\frac{1}{r^2}\end{math}, который мы увидим чуть позже
+\pause
+\item Мы не будем учитывать плоскости, излучающие свет, в importance sampling'е (но свет они всё равно излучают!)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Равномерное распределение на параллелепипеде}
+\begin{itemize}
+\item Разные грани параллелепипеда имеют разную площадь, вероятность выбрать точку на грани должна быть пропорциональна её площади
+\pause
+\item В наших терминах, у параллелепипеда с параметрами \begin{math}(S_X,S_Y,S_Z)\end{math} рёбра имеют длины \begin{math}(2S_X, 2S_Y, 2S_Z)\end{math}, соответственно
+\pause
+\item Площади граней -- \begin{math}(4 S_Y S_Z,4 S_X S_Z,4 S_X S_Y)\end{math} -- это их `веса' \begin{math}(W_X,W_Y,W_Z)\end{math}
+\pause
+\item Сумма весов -- \begin{math}W = W_X+W_Y+W_Z=4(S_YS_Z+S_XS_Z+S_XS_Y)\end{math}
+\pause
+\item Можно сгенерировать число в \begin{math}U(0, W)\end{math} и сравнивать с весами граней, а можно генерировать число в \begin{math}U(0,1)\end{math} и отнормировать веса на \begin{math}W\end{math} -- это примерно одно и то же
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Равномерное распределение на параллелепипеде}
+\begin{itemize}
+\item Итак, сгенерируем равномерно случайное число \begin{math}U \sim U(0, W)\end{math}
+\pause
+\item Если \begin{math}U < W_X\end{math}, выбираем грань, перпендикулярную оси X (т.е. грань YZ)
+\pause
+\item Если \begin{math}W_X \leq U < W_X + W_Y\end{math}, выбираем грань, перпендикулярную оси Y (т.е. грань XZ)
+\pause
+\item Иначе выбираем грань, перпендикулярную оси Z (т.е. грань XY)
+\pause
+\item У каждой грани есть противоположная грань с такой же площадью: подбросим монетку, и с вероятностью 50\% выберем одну из двух граней
+\pause
+\item Например, если мы выбрали грань -Y, то точку на грани можно сгенерировать как \begin{math}(U_X S_X, -S_Y, U_Z S_Z)\end{math}, где \begin{math}U_X, U_Z \sim U(-1, 1)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Равномерное распределение на эллипсоиде}
+\begin{itemize}
+\item Равномерное распределение на эллипсоиде построить очень тяжело: например, его плотность, зависящая от площади поверхности эллипсоида, не выражается в элементарных функциях (нужны т.н. \textit{эллиптические интегралы})
+\pause
+\item Мы можем взять неравномерное распределение, которое легко получить: сгенерировать точку \begin{math}(X,Y,Z)\end{math} равномерно на единичной сфере, и отмасштабируем до размеров эллипсоида \begin{math}(R_XX,R_YY,R_ZZ)\end{math}
+\pause
+\item Нам всё ещё нужно посчитать плотность такого распределения!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Преобразование распределения}
+\begin{itemize}
+\item Рассмотрим общий случай: есть некоторое распределение \begin{math}p_A\end{math} на некой поверхности \begin{math}A\end{math}
+\pause
+\item Мы применяем к нему трёхмерное преобразование \begin{math}F\end{math}, переводящее поверхность \begin{math}A\end{math} в поверхность \begin{math}B\end{math} и распределение \begin{math}p_A\end{math} в распределение \begin{math}p_B\end{math}
+\pause
+\item Рассмотрим маленький кусочек \begin{math}d\sigma_A\end{math} поверхности \begin{math}A\end{math}: на него приходится \begin{math}\approx p_A(a) \cdot d\sigma_A\end{math} вероятности
+\pause
+\item Под действием преобразования он переводится в кусочек \begin{math}d\sigma_B\end{math} поверхности \begin{math}B\end{math}, и на него приходится \begin{math}\approx p_B(F(a)) \cdot d\sigma_B\end{math} вероятности
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Преобразование распределения}
+\begin{itemize}
+\item Отсюда
+\begin{gather*}
+p_B(F(a)) d\sigma_B = p_A(a) d\sigma_A \\
+p_B(F(a)) = p_A(a) \frac{d\sigma_A}{d\sigma_B}
+\end{gather*}
+\pause
+\item То есть, изменение плотности вероятности \textit{обратно пропорционально} локальному изменению площади поверхности
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Преобразование распределения}
+\begin{itemize}
+\item Локальное изменение площади зависит от \textit{якобиана} \begin{math}J_F\end{math} нашего преобразования, и зависит от локальной ориентации поверхности
+\pause
+\item Например, растягивание по оси X в 10 раз никак не меняет кусок поверхности, параллельный плоскости YZ
+\pause
+\item Формально, преобразование плоскости сводится к \textit{внешнему квадрату} якобиана \begin{math}\Lambda^2 J_F\end{math}, т.е. к главным минорам \begin{math}2\times 2\end{math} матрицы якобиана
+\pause
+\item В 3D есть более удобная формула
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Преобразование распределения}
+\begin{itemize}
+\item Рассмотрим маленький кубик, `лежащий` на нашей поверхности: одна его грань параллельна поверхности, и одно его ребро параллельно нормали к поверхности
+\pause
+\item Мы знаем, что под действием \begin{math}J_F\end{math} кубик превратится в некий параллелепипед (в общем случае не прямоугольный!), его объём увеличится в \begin{math}\det J_F\end{math} раз
+\pause
+\item Мы знаем, что параллельная поверхности грань перейдёт в грань, параллельную преобразованной поверхности; нас интересует, как изменилась площадь этой грани
+\pause
+\item Объём параллелепипеда это площадь грани, умноженная на высоту
+\pause
+\item Высота это проекция преобразованной нормали на новую нормаль
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Преобразование распределения}
+\begin{itemize}
+\item Преобразованная нормаль: \begin{math}J_F \cdot N\end{math}
+\pause
+\item Новая нормаль: \begin{math}\frac{J_F^{-T}\cdot N}{\|J_F^{-T}\cdot N\|}\end{math}
+\pause
+\item Проекция: \begin{math}(J_F\cdot N) \cdot \left(\frac{J_F^{-T}\cdot N}{\|J_F^{-T}\cdot N\|}\right)\end{math}
+\pause
+\item Площадь грани:
+\begin{gather*}
+\det J_F \cdot \frac{\|J_F^{-T}\cdot N\|}{(J_F\cdot N) \cdot (J_F^{-T}\cdot N)} = \\
+= \det J_F \cdot \frac{\|J_F^{-T}\cdot N\|}{(J_F^{-1} \cdot J_F\cdot N) \cdot N} = \\
+= \det J_F \cdot \frac{\|J_F^{-T}\cdot N\|}{N \cdot N} = \det J_F \cdot \|J_F^{-T}\cdot N\|
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Преобразование распределения}
+\begin{itemize}
+\item Итак, зная преобразование поверхности и нормаль к ней, можно вычислить локальное изменение площади как
+\begin{gather*}
+\det J_F \cdot \|J_F^{-T}\cdot N\|
+\end{gather*}
+\pause
+\item Тогда, изменение плотности вероятности будет равно
+\begin{gather*}
+p_B(F(a)) = \frac{p_A(a)}{\det J_F(a) \cdot \|J_F^{-T}(a)\cdot N(a)\|}
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Распределение на эллипсоиде}
+\begin{itemize}
+\item Эллипсоид получен из единичной сферы линейным преобразованием
+\begin{equation*}
+F = \begin{pmatrix}
+R_X & 0 & 0 \\
+0 & R_Y & 0 \\
+0 & 0 & R_Z 
+\end{pmatrix}
+\end{equation*}
+\pause
+\item Оно линейно, поэтому якобиан совпадаем с самим преобразованием
+\pause
+\item Определитель: \begin{math}\det F = R_XR_YR_Z\end{math}
+\pause
+\begin{gather*}
+\|J_F^{-T} \cdot N\| = \left\|\left(\frac{N_X}{R_X}, \frac{N_Y}{R_Y}, \frac{N_Z}{R_Z}\right)\right\| = \\
+= \sqrt{\left(\frac{N_X}{R_X}\right)^2+\left(\frac{N_Y}{R_Y}\right)^2+\left(\frac{N_Z}{R_Z}\right)^2}
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Распределение на эллипсоиде}
+\begin{itemize}
+\item Преобразование площади:
+\begin{gather*}
+\det J_F \cdot \|J_F^{-T} \cdot N\| = \sqrt{N_X^2R_Y^2R_Z^2 + R_X^2N_Y^2R_Z^2 + R_X^2R_Y^2N_Z^2}
+\end{gather*}
+\pause
+\item Итого плотность точки на эллипсоиде, полученной из равномерного распределения на единичной сфере:
+\begin{gather*}
+p(R_XN_X,R_YN_Y,R_ZN_Z) = \frac{1}{4\pi\sqrt{N_X^2R_Y^2R_Z^2 + R_X^2N_Y^2R_Z^2 + R_X^2R_Y^2N_Z^2}}
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Распределение на эллипсоиде}
+\begin{itemize}
+\item Преобразование площади:
+\begin{gather*}
+\det J_F \cdot \|J_F^{-T} \cdot N\| = \sqrt{N_X^2R_Y^2R_Z^2 + R_X^2N_Y^2R_Z^2 + R_X^2R_Y^2N_Z^2}
+\end{gather*}
+\pause
+\item Итого плотность точки на эллипсоиде, полученной из равномерного распределения на единичной сфере:
+\begin{gather*}
+p(R_XN_X,R_YN_Y,R_ZN_Z) = \frac{1}{4\pi\sqrt{N_X^2R_Y^2R_Z^2 + R_X^2N_Y^2R_Z^2 + R_X^2R_Y^2N_Z^2}}
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Распределение направлений}
+\begin{itemize}
+\item Мы научились генерировать точки на поверхности источника света и вычислять их плотность вероятности
+\pause
+\item Для интегрирования нам нужны направления на эти точки и их плотность вероятности
+\pause
+\item Само направление получить просто: это нормированный вектор из освещаемой точки в случайную точку на поверхности источника света
+\pause
+\item Вопрос в том, как получить плотность вероятности
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Area formulation of light transport}
+\begin{itemize}
+\item Мы писали уравнение рендеринга как интеграл по всем входным направлениям
+\pause
+\item Вместо этого можно написать интеграл по всем точкам всех поверхностей сцены, и учесть количество света, приходящее из этих точек
+\pause
+\item Вывод смотри в \href{https://www.cg.tuwien.ac.at/courses/Rendering/2020/slides/04_The_Rendering_Equation_v20200515.pdf}{\texttt{здесь}} и \href{https://www.dgp.toronto.edu/~lessig/dissertation/files/area_formulation.pdf}{\texttt{здесь}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Area formulation of light transport}
+\begin{equation*}
+L_{out}(x, \omega_o) = L_e(x, \omega_o) + \int\limits_y f(x,\omega_i,\omega_o) \cdot L_{out}(y, -\omega_i) \cdot V(x,y)\cdot \frac{|\cos \theta_x| \cdot |\cos \theta_y|}{\|x-y\|^2} dy
+\end{equation*}
+\pause
+\begin{itemize}
+\item \begin{math}x\end{math} -- освещаемая точка
+\pause
+\item \begin{math}y\end{math} -- точка, из которой свет идёт в освещаемую точку
+\pause
+\item \begin{math}\omega_i = \frac{y-x}{\|y-x\|}\end{math} -- направление из \begin{math}x\end{math} в \begin{math}y\end{math}
+\pause
+\item \begin{math}V(x,y)\end{math} -- \textit{visibility term}: 1, если луч из \begin{math}x\end{math} в \begin{math}y\end{math} ничем не заблокирован, иначе 0
+\pause
+\item \begin{math}\theta_x = \omega_i \cdot n_x\end{math} -- косинус угла между лучом и нормалью в точке \begin{math}x\end{math}
+\pause
+\item \begin{math}\theta_y = (-\omega_i) \cdot n_y\end{math} -- косинус угла между лучом и нормалью в точке \begin{math}y\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Распределение направлений}
+\begin{itemize}
+\item От этого уравнения нам нужен только множитель \begin{math}\frac{|\cos\theta_y|}{\|x-y\|^2}\end{math}: он описывает то, какой телесный угол в точке \begin{math}x\end{math} соответствует элементу площади некой поверхности вокруг в точке \begin{math}y\end{math}
+\pause
+\item Плотность вероятности меняется \textit{обратно пропорционально} изменению площади
+\pause
+\item Если мы сгенерировали семпл \begin{math}y\end{math} на поверхности источника света с вероятностью \begin{math}p(y)\end{math} и нормалью \begin{math}n_y\end{math}, то плотность вероятности соответствующего угла равна
+\begin{gather*}
+p(\omega) = p(y) \cdot \frac{\|x-y\|^2}{|\omega \cdot n_y|} \\
+\omega = \frac{y-x}{\|y-x\|}
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Распределение направлений}
+\begin{itemize}
+\item Обычно наши источники света -- двусторонние (параллелепипед, эллипсоид)
+\pause
+\item Одному направлению соответствуют \textit{две точки} на поверхности источника света
+\pause
+\item \begin{math}\Longrightarrow\end{math} Чтобы правильно вычислить вероятность направления, нужно \textit{сложить} вероятности двух соответствующих точек на поверхности света
+\pause
+\item Для этого можно или модифицировать функцию пересечения, чтобы она возвращала оба пересечения, или просто послать луч второй раз `внутри' источника от точки первого пересечения
+\pause
+\item \alert{\textbf{N.B.}}: Позже мы перейдём к только треугольникам, и эта проблема уйдёт
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Light surface sampling: алгоритм}
+\begin{itemize}
+\item Итак, если мы хотим в Монте-Карло интегрировании сэмплить некоторый источник света, нужно:
+\pause
+\item 1. Сгенерировать точку на поверхности источника с каким-то распределением вероятности
+\pause
+\item 2. По точке получить направление \begin{math}\omega\end{math} из освещаемой точки в точку на источнике света
+\pause
+\item 3. Вычислить, какие две точки на поверхности источника соответствуют этому направлению (пересекать со всей сценой здесь \textbf{не нужно}, только с одним объектом -- источником света)
+\pause
+\item 4. Вычислить плотность вероятности этих точек согласно выбранному распределению
+\pause
+\item 5. Вычислить плотность вероятности направления как сумма двух спроецированных вероятностей (формула с косинусом и расстоянием, два раза)
+\pause
+\item 6. Наш семпл готов, вы восхитительны!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Light surface sampling}
+\begin{itemize}
+\item \textbf{\alert{N.B.}}: Использовать \textit{только} семплинг источника света не получится -- картинка будет неправильной, так как распределение направлений не покрывает носитель интегрируемой функции
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Light surface sampling}
+\slideimage{only_light_1024.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Multiple importance sampling (MIS)}
+\begin{itemize}
+\item Итак, мы придумали два распределения, которые могут уменьшить variance изображения:
+\pause
+\begin{itemize}
+\item Cosine-weighted распределение идеально подходит для диффузной поверхности
+\pause
+\item Light surface sampling направляет лучи в сторону источников света и полезно, когда источники маленькие или далеко
+\end{itemize}
+\pause
+\item Хотелось бы их как-то скомбинировать!
+\pause
+\item \begin{math}\Longrightarrow\end{math} \textit{Multiple importance sampling (MIS)}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Multiple importance sampling (MIS)}
+\begin{itemize}
+\item Есть много способов комбинировать распределения, подробнее смотри в статье \href{https://cseweb.ucsd.edu/~viscomp/classes/cse168/sp21/readings/veach.pdf}{\texttt{Veach, Guibas - Optimally Combining Sampling Techniques for Monte Carlo Rendering (1995)}}
+\pause
+\item Мы будем использовать простую эвристику: аффинную комбинацию распределений
+\pause
+\item С вероятностью 50\% возьмём cosine-weighted распределение
+\pause
+\item С вероятностью 50\% возьмём случайный источник света и случайный семпл на нём
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Multiple importance sampling (MIS)}
+\begin{itemize}
+\item Таким образом, пусть \begin{math}p_{\cos}(\omega)\end{math} -- плотность вероятности cosine-weighted распределения, и \begin{math}p_i(\omega)\end{math} -- вероятность семплинга i-ого из N источников света
+\pause
+\item Тогда наше итоговое распределение:
+\begin{gather*}
+p(\omega) = \frac{1}{2}p_{\cos}(\omega) + \frac{1}{2N}\sum p_i(\omega)
+\end{gather*}
+\pause
+\item В итоге мы сгенерируем семпл направления одним из выбранных распределений, но для Монте-Карло интегрирования нам нужна его вероятность, поэтому нам всё равно нужно вычислить вероятность этого семпла для \textit{всех распределений}, а не только того, которым он сгенерирован!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{MIS: алгоритм для диффузной поверхности}
+\begin{itemize}
+\item 1. Бросаем монетку
+\pause
+\item 2.1. С вероятностью 50\% генерируем семпл направления \begin{math}\omega\end{math} cosine-weighted распределением
+\pause
+\item 2.2. Либо с вероятностью 50\% генерируем семпл направления \begin{math}\omega\end{math} в сторону случайного семпла на поверхности одного из источников света
+\pause
+\item 3. Вычисляем итоговую вероятность этого семпла \begin{math}p(\omega) = \frac{1}{2}p_{\cos}(\omega) + \frac{1}{2N}\sum p_i(\omega)\end{math}
+\pause
+\item 3.1. Не забываем, что cosine-weighted вероятность равна нулю с другой стороны нормали
+\pause
+\item 3.2. Не забываем, что источники света двухсторонние
+\pause
+\item 4. Используем семпл в Монте-Карло интегрировании:
+\begin{gather*}
+E + \frac{C}{\pi} \cdot L_{in}(\omega) \cdot (\omega \cdot n) \cdot \frac{1}{p(\omega)}
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Uniform vs cosine vs MIS: 64 семпла}
+\slideimage{mis_64.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Uniform vs cosine vs MIS: 256 семпла}
+\slideimage{mis_256.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Uniform vs cosine vs MIS: 1024 семпла}
+\slideimage{mis_1024.png}
+\end{frame}
+
+\end{document}
