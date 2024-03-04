@@ -1,0 +1,111 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt,handout]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Практика 4}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Описание практики}
+\begin{itemize}
+\item Главная задача практики -- реализовать multiple importance sampling для диффузных поверхностей, как описано в лекции:
+\begin{itemize}
+\item Генерировать случайное направление cosine-weighted распределением или в сторону случайно выбранного ограниченного источника света (плоскости тут игнорируем)
+\item Правильно вычислять суммарную вероятность этого семпла
+\end{itemize}
+\item Металлы и диэлектрики не трогаем, их код никак не меняется
+\item Новых команд в формате сцены нет
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Советы}
+\begin{itemize}
+\item МАКСИМАЛЬНО внимательно следим за всеми формулами и коэффициентами
+\item Удобно под каждый тип распределения завести класс с такими методами:
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item \mintinline{cpp}|vec3 sample(vec3 x, vec3 n)| -- генерирует случайный вектор направления из точки x с нормалью n
+\item \mintinline{cpp}|float pdf(vec3 x, vec3 n, vec3 d)| -- вычисляет плотность вероятности направления d из точки x с нормалью n
+\end{itemize}
+\item Можно сделать \mintinline{cpp}|x| и \mintinline{cpp}|n| полями класса распределения, тогда они не нужны в аргументах методов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Советы}
+\begin{itemize}
+\item Напрашиваются такие классы распределений:
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item \mintinline{cpp}|uniform| -- равномерное на полусфере (baseline для сравнения)
+\item \mintinline{cpp}|cosine| -- cosine-weighted на полусфере
+\item \mintinline{cpp}|light| -- направление на поверхность конкретного источника света
+\item \mintinline{cpp}|mix(d1, d2, ...)| -- смесь нескольких распределений с одинаковыми вероятностями
+\end{itemize}
+\item Тогда наше распределение это \mintinline{cpp}|mix(cosine, mix(light(l0), light(l1), ...))|
+\item Если нет ни одного источника, то будем использовать просто \mintinline{cpp}|cosine|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Советы}
+\begin{itemize}
+\item \mintinline{cpp}|cosine.pdf| должна возвращать 0, если \mintinline{cpp}|dot(n, d) < 0|
+\item \mintinline{cpp}|light.pdf| должна возвращать 0, если луч \mintinline{cpp}|(x,d)| не пересекает источник света
+\item В противном случае, \mintinline{cpp}|light.pdf| должна возвращать сумму по двум точкам пересечения
+\item Обратите внимание, что в формуле перевода плотности семпла на поверхности источника в плотность семпла направления фигурирует косинус угла \textit{на поверхности источника}, а не косинус угла в освещаемой точке!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Примеры сцены}
+Сцены из 3ей практики нам отлично подойдут:
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_1.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_1.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_2.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_2.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_3.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_3.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_4.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_4.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice3_5.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_5.txt}}
+\end{frame}
+
+\end{document}
