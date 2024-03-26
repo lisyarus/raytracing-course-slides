@@ -497,6 +497,54 @@ BVH::build_node(vector<Primitive> & primitives,
 \end{frame}
 
 \begin{frame}[fragile]
+\frametitle{BVH: вычисление AABB}
+\begin{itemize}
+\item Как вычислить AABB для примитивов?
+\pause
+\item Параллелепипед -- совпадает со своим AABB
+\pause
+\item Эллипсоид -- берём его радиусы, они описывают нужный AABB
+\pause
+\item Треугольник -- вычисляем минимальные и макимальные значения координат по всем трём осям
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: вычисление AABB}
+\begin{itemize}
+\item Если примитив сдвинут, то сдвиг нужно применить и к AABB
+\pause
+\item Если примитив повёрнут, то нужно вычислить повёрнутый AABB -- например, как bounding box восьми повёрнутых вершин не повёрнутого AABB
+\pause
+\item \textbf{\alert{N.B.:}} Как всегда, нужно сначала применить поворот, а потом сдвиг!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{AABB: описание в коде}
+\usemintedstyle{solarized-light}
+\begin{minted}[bgcolor=lightbg]{cpp}
+struct AABB
+{
+    glm::vec3 min;
+    glm::vec3 max;
+
+    void extend(vec3 p)
+    {
+        min = glm::min(min, p);
+        max = glm::max(max, p);
+    }
+
+    void extend(AABB aabb)
+    {
+        min = glm::min(min, aabb.min);
+        max = glm::max(max, aabb.max);
+    }
+};
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]
 \frametitle{Ускорение обхода: early-out}
 \begin{itemize}
 \item Запоминаем расстояние до ближайшего уже найденного пересечения
@@ -627,6 +675,29 @@ BVH::build_node(vector<Primitive> & primitives,
 \item При multiple importance sampling'е источников света, для вычисления правильной вероятности направления, нам нужно найти все источники света, пересекающие луч из текущей точки в этом направлении
 \pause
 \item Лучше для источников света завести отдельную, независимую BVH (и \textbf{не делать} early-out при её обходе, так как нам нужны \textbf{все} пересечения, а не ближайшее)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: BLAS и TLAS}
+\begin{itemize}
+\item Часто неудобно иметь одну BVH на все треугольники сцены, если какие-то объекты двигаются или анимируются
+\pause
+\item В таком случае разделяют
+\pause
+\begin{itemize}
+\item \textit{Bottom-level accelerating structure (BLAS)} -- BVH, которая строится для конкретного объекта в его локальной системе координат
+\pause
+\item \textit{Top-level accelerating structure (TLAS)} -- BVH, которая строится не для треугольников, а для самих объектов, в системе координат сцены
+\end{itemize}
+\pause
+\item Тогда нужен двухуровневый проход по BVH
+\pause
+\begin{itemize}
+\item Вычисляем, какие объекты могут пересекаться лучом, используя TLAS
+\pause
+\item Вычисляем, какие треугольники пересекаются лучом, используя BLAS каждого объекта
+\end{itemize}
 \end{itemize}
 \end{frame}
 
