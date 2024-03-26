@@ -1,0 +1,740 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Лекция 5: Оптимизация рейтрейсинга, распараллеливание, BVH}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Треугольники}
+\begin{itemize}
+\item В современности, основной примитив для описания трёхмерных объектов -- \textit{треугольник}
+\pause
+\item Почему?
+\pause
+\begin{itemize}
+\item Простота описания
+\pause
+\item Простота рисования (важнее при растеризации)
+\pause
+\item Простота интерполяции значений вершин
+\pause
+\item Возможность аппроксимировать любые фигуры
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Треугольники}
+\begin{itemize}
+\item Как поддержать треугольник в нашем рейтрейсере?
+\pause
+\item Нам нужны три операции:
+\pause
+\begin{itemize}
+\item Вычислить пересечение луча и треугольника
+\pause
+\item Вычислить нормаль к треугольнику
+\pause
+\item Сгенерировать случайную точку на треугольнике
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Треугольники}
+\begin{itemize}
+\item Точки треугольника с вершинами \begin{math}(A,B,C)\end{math} удобно параметризовать двумя параметрами \begin{math}(u,v)\end{math} как
+\begin{equation*}
+A + u\cdot (B-A) + v\cdot (C-A)
+\end{equation*}
+\pause
+\item Точка принадлежит треугольнику, если \begin{math}0 \leq u, 0 \leq v, u + v \leq 1\end{math}
+\pause
+\item Произвольные значения \begin{math}(u,v)\end{math} описывают точку на плоскости, в которой лежит треугольник
+\pause
+\item Тройка \begin{math}(1-u-v, u, v)\end{math} -- \textit{барицентрические координаты} точки относительно вершин треугольника
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пересечение луча с треугольником}
+\begin{itemize}
+\item Пересечение луча \begin{math}O + t\cdot D\end{math} сводится к решению уравнения
+\begin{equation*}
+A + u\cdot (B-A) + v\cdot (C-A) = O + t\cdot D
+\end{equation*}
+\pause
+\item Немного его перепишем:
+\begin{equation*}
+u\cdot (B-A) + v\cdot (C-A) - t\cdot D = O - A
+\end{equation*}
+\pause
+\item Это линейная система уравнений \begin{math}3\times 3\end{math} с неизвестными \begin{math}(u,v,t)\end{math} и матрицей со столбцами \begin{math}(B-A, C-A, -D)\end{math}
+\pause
+\item Решить её можно явным обращением матрицы
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пересечение луча с треугольником}
+\begin{itemize}
+\item Мы получили значения \begin{math}(u,v,t)\end{math} -- они описывают точку пересечения луча с плоскостью, содержащей треугольник
+\pause
+\item Если не выполняется хотя бы одно из условий \begin{math}0\leq u, 0\leq v, u+v \leq 1\end{math}, то точка не лежит в треугольнике \begin{math}\Longrightarrow\end{math} пересечения нет
+\pause
+\item Если \begin{math}t < 0\end{math}, то точка лежит сзади начала луча \begin{math}\Longrightarrow\end{math} пересечения нет
+\pause
+\item В противном случае пересечение есть
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пересечение луча с треугольником}
+\begin{itemize}
+\item Нормаль к поверхности треугольника \begin{math}(A,B,C)\end{math} -- нормированный вектор \begin{math}N = (B-A)\times(C-A)\end{math}
+\pause
+\item Треугольник не имеет внутренности, поэтому будем считать вектор \begin{math}N\end{math} выходящим из внешней стороны треугольника, а вектор \begin{math}(-N)\end{math} -- из внутренней стороны
+\pause
+\item Как обычно, по знаку \begin{math}N\cdot D\end{math} понимаем, снаружи луч, или внутри, и переворачиваем нормаль, если луч внутри
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Семплинг поверхности треугольника}
+\begin{itemize}
+\item Так как преобразование \begin{math}(u, v) \mapsto P\end{math} -- аффинное, т.е. имеет константный Якобиан, нам достаточно сгенерировать равномерно точку в треугольнике \begin{math}0\leq u, 0\leq v, u+v \leq 1\end{math} -- соответствующая точка в треугольнике \begin{math}(A,B,C)\end{math} автоматически будет равномерно распределена
+\pause
+\item Генерируем равномерные \begin{math}U,V \sim U(0,1)\end{math}
+\pause
+\item Если \begin{math}U+V>1\end{math}, отражаем их через центр квадрата \begin{math}[0,1]\times [0,1]\end{math} преобразованием \begin{math}U \mapsto 1-U, V \mapsto 1-V\end{math}
+\pause
+\item Плотность полученной точки на треугольнике равна \begin{math}1/S\end{math}, где \begin{math}S = \frac{1}{2}\| (B-A)\times (C-A)\|\end{math} -- площадь треугольника
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Об оптимизации рендеринга}
+\begin{itemize}
+\item Мы видели, что Монте-Карло интегрирование занимает очень много времени, если мы хотим получить качественную картинку
+\pause
+\item Хочется научиться оптимизировать процесс
+\pause
+\item Оптимизировать = получить картинку более высокого качества за то же время
+\pause
+\item Два варианта:
+\pause
+\begin{itemize}
+\item Увеличивать качество каждого луча (прошлая лекция)
+\pause
+\item Ускорять вычисление каждого луча (эта лекция)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Оптимизация -- это сложно}
+На производительность CPU влияют:
+\pause
+\begin{itemize}
+\item Общая загруженность системы
+\pause
+\item Количество и паттерн доступов к памяти (cache-friendliness)
+\pause
+\item Как функции программы лежат в памяти (опять кэш)
+\pause
+\item Branch prediction
+\pause
+\item Оптимизации компилятора
+\pause
+\item Throttling
+\pause
+\item Многое другое
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Хорошие новости}
+\begin{itemize}
+\item Рейтрейсинг -- очень предсказуемый алгоритм: мы буквально огромное количество раз выполняем одну и ту же операцию
+\pause
+\item Как оптимизировать:
+\pause
+\begin{itemize}
+\item Точечно оптимизировать конкретные участки кода
+\pause
+\item Ускорять алгоритмически
+\pause
+\item Распараллеливать
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Точечные оптимизации}
+\begin{itemize}
+\item Более эффективная реализация конкретных операций
+\pause
+\begin{itemize}
+\item Быстрое вращение вектора кватернионом \href{https://blog.molecular-matters.com/2013/05/24/a-faster-quaternion-vector-multiplication/}{\texttt{blog.molecular-matters.com/2013/05/24/a-faster-quaternion-vector-multiplication}}
+\end{itemize}
+\pause
+\item Кеширование значений
+\pause
+\begin{itemize}
+\item Нормаль и площадь треугольника
+\pause
+\item Вектор \begin{math}\left(\frac{1}{D_X}, \frac{1}{D_Y}, \frac{1}{D_Z}\right)\end{math}, использующийся при пересечения луча и параллелепипеда
+\end{itemize}
+\pause
+\item Избегание бесполезных операций
+\pause
+\begin{itemize}
+\item Не посылаем рекурсивно луч, если его вклад потом домножится на 0 (например, при importance sampling'е источника света с внутренней стороны поверхности объекта)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Точечные оптимизации}
+\begin{itemize}
+\item Компактное и непрерывное расположение данных в памяти
+\pause
+\begin{itemize}
+\item Меньше указателей и pointer chasing'а
+\pause
+\item Больше простых структур в непрерывных массивах
+\end{itemize}
+\pause
+\item Branch prediction
+\pause
+\begin{itemize}
+\item Меньше виртуальных функций и иерархий классов
+\pause
+\item Замена вычислений branchless эквивалентами
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Точечные оптимизации}
+\begin{itemize}
+\item Избегание лишних аллокаций памяти
+\pause
+\begin{itemize}
+\item В основном коде рейтрейсера (после того, как сцена прочитана) их в идеале не должно быть вообще
+\end{itemize}
+\pause
+\item SSE-реализации математических операций
+\pause
+\item См. \href{https://jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays/}{\texttt{jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Большие сцены}
+\begin{itemize}
+\item Точечные оптимизации могут дать вам весомое ускорение, вплоть до нескольких десятков процентов
+\pause
+\item Тем не менее, они никак не помогут нам с рендерингом больших сцен
+\pause
+\item В основе вычисления цвета луча -- алгоритм со сложностью \begin{math}N \cdot D\end{math}, где \begin{math}N\end{math} -- количество объектов в сцене, а \begin{math}D\end{math} -- максимальная глубина
+\pause
+\item Зависимость от \begin{math}N\end{math} \textit{линейная} -- это слишком медленно, если мы хотим рисовать сцены с миллионами треугольников!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Деревья}
+\begin{itemize}
+\item В вычислительной геометрии есть множество структур данных, позволяющих ускорить запросы к геометрическим данным, использующие их локальность
+\pause
+\item Почти всегда это какие-нибудь \textit{деревья}: R/R+/R*-деревья, квадро/октодеревья, BSP-деревья, \begin{math}\dots\end{math}
+\pause
+\item Общий термин для подобных древовидных пространственных структур данных -- \textit{bounding volume hierarchy (BVH)}
+\pause
+\item В рейтрейсинге под BVH обычно понимают разновидность R-деревьев
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: описание}
+\begin{itemize}
+\item Каждая вершина дерева описывает некоторую область пространства, ограниченную прямоугольным параллелепипедом, параллельным осям координат (\textit{axis-aligned bounding box, AABB})
+\pause
+\item Такой параллелепипед можно описать двумя точками -- с минимальными и максимальными координатами по X, Y и Z соответственно
+\pause
+\item У вершины могут быть дочерние вершины, AABB которых полностью содержатся в AABB самой вершины
+\pause
+\item У вершины может быть список объектов сцены, полностью содержащихся в AABB самой вершины
+\pause
+\item Все объекты сцены, кроме бесконечных (плоскостей), должны лежать в какой-то одной вершине дерева
+\pause
+\item \textbf{\alert{N.B.:}} AABB двух дочерних вершин одной вершины \underline{могут пересекаться}!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{О хранении структур данных}
+\begin{itemize}
+\item Кажется естественным хранить дерево в виде указателя на корневую вершину, и в вершине хранить детей тоже в виде указателей
+\pause
+\item Это \textbf{плохой способ} по ряду причин:
+\pause
+\begin{itemize}
+\item Создание дерева использует много маленьких аллокаций памяти
+\pause
+\item Вершины дерева будут лежать в памяти как попало, мало шансов иметь их близко в памяти
+\pause
+\item Сложно поддержать циклические связи между вершинами
+\pause
+\item Удаление дерева -- медленная рекурсивная операция
+\pause
+\item Копирование дерева (deep copy) -- медленная рекурсивная операция
+\pause
+\item Сериализация дерева -- медленная рекурсивная операция
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{О хранении структур данных}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Есть способ лучше:
+\pause
+\begin{itemize}
+\item Хранить все вершины дерева как структуры в непрерывном массиве (\mintinline{cpp}|std::vector|)
+\pause
+\item Использовать индексы этого массива как ссылки между вершинами
+\end{itemize}
+\pause
+\item При таком способе:
+\pause
+\begin{itemize}
+\item Создание дерева использует минимум аллокаций памяти
+\pause
+\item Вершины дерева будут лежать в памяти непрерывно
+\pause
+\item Циклические связи между вершинами тривиальны -- просто храним индексы
+\pause
+\item Удаление дерева сводится к одной деаллокации массива вершин
+\pause
+\item Копирование дерева (deep copy) работает автоматически (скопированные индексы будут ссылаться на скопированный массив вершин)
+\pause
+\item Сериализация дерева сводится к побайтовой сериализации массива вершин
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: хранение объектов сцены}
+\begin{itemize}
+\item Не нужно хранить объекты сцены прямо в вершинах, это сделает вершины дерева тяжёлыми и неэффективными
+\pause
+\item При построении дерева можно отсортировать массив объектов сцены так, чтобы объекты, лежащие в конкретной вершине, хранились непрерывно в массиве всех объектов сцены
+\pause
+\item Тогда в вершине дерева можно запомнить только индекс первого объекта сцены, лежащего в этой вершине, и количество таких объектов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: описание в коде}
+\usemintedstyle{solarized-light}
+\begin{minted}[bgcolor=lightbg]{cpp}
+struct Node
+{
+    vec3 aabb_min;
+    vec3 aabb_max;
+    uint32_t left_child;
+    uint32_t right_child;
+    uint32_t first_primitive_id;
+    uint32_t primitive_count;
+};
+
+struct BVH
+{
+    vector<Node> nodes;
+    uint32_t root;
+};
+
+struct Scene
+{
+    vector<Primitive> primitives;
+    BVH bvh;
+};
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Data-oriented design}
+\begin{itemize}
+\item \textit{DOD (data-oriented design)} (иногда \textit{DDD, data-driven design}) -- методология, призванная структурировать код и алгоритмы вокруг \textit{потока данных} вашей программы
+\pause
+\item Часто противопоставляется ООП по историческим причинам: 15 лет назад все всё писали на иерархиях классов, теперь всё пишут на непрерывных массивах
+\pause
+\item DOD -- очень полезная концепция, но, как и с любым другим инструментом, нужно понимать, где и зачем её применять
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: обход}
+\begin{itemize}
+\item Хотим найти пересечение луча со сценой
+\pause
+\item Рекурсивно спускаемся по дереву от корневой вершины
+\pause
+\item Если луч не пересекает AABB вершины, игнорируем эту вершину
+\pause
+\item В противном случае, пересекаем луч с объектами сцены в этой вершине (если они есть) и спускаемся в дочерние вершины (если они есть)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: построение}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Можно выделить рекурсивный метод
+\begin{minted}{cpp}
+BVH::build_node(vector<Primitive> & primitives,
+    uint32_t first, uint32_t count)
+\end{minted}
+\pause
+\item Тогда построение дерева сводится к вызову
+\mintinline{cpp}|bvh.root = bvh.build_node(primitives, 0, primitives.size())|
+\pause
+\item \textbf{\alert{N.B.:}} Вместо индексов может быть удобно использовать итераторы
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: построение}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item При построении вершины дерева, надо определиться
+\pause
+\begin{itemize}
+\item 1. Хотим ли мы её разбивать на дочерние вершины
+\pause
+\item 2. Если да, то как именно это сделать
+\end{itemize}
+\pause
+\item Если \mintinline{cpp}|count| достаточно мал (например, не больше 4), то разбивать вершину дальше нет смысла -- мы быстрее проверим пересечение с самими объектами сцены, чем разберёмся с AABB вершины
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: построение}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Если \mintinline{cpp}|count| больше порогового значения, надо как-то разбить объекты на две группы
+\pause
+\item Простой вариант -- разбить вдоль середины самого длинного ребра AABB вершины:
+\pause
+\begin{itemize}
+\item Вычисляем, какое из рёбер (X, Y или Z) самое длинное
+\pause
+\item Разбиваем объекты \mintinline{cpp}|[first, first + count)| на две группы (в C++ это \mintinline{cpp}|std::partition|)
+\pause
+\item \mintinline{cpp}|[first, first + middle)| -- те, кто левее центра ребра (вдоль выбранной оси)
+\item \mintinline{cpp}|[first + middle, first + count)| -- те, кто правее
+\pause
+\item Рекурсивно вызываем создание двух дочерних вершин на двух подмножествах объектов сцены
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: построение}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item При рекурсивном разбиении нужно аккуратно обработать патологические случаи
+\pause
+\item Если в одну из дочерних вершин попадает 0 объектов сцены, разбиение нужно отменить, и положить все объекты в текущую вершину
+\pause
+\item Иначе может произойти бесконечная рекурсия
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ускорение обхода: early-out}
+\begin{itemize}
+\item Запоминаем расстояние до ближайшего уже найденного пересечения
+\pause
+\item При посещении вершины, если луч пересекает её AABB, вычисляем расстояние до ближайшего пересечения AABB вершины
+\pause
+\item Если расстояние до AABB вершины больше, чем ближайшее уже найденное пересечение с каким-то объектом, то вершину можно пропустить
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ускорение обхода: ordered traversal}
+\begin{itemize}
+\item При посещении дочерних вершин какой-либо вершины, мы можем выбрать оптимальный порядок их посещения
+\pause
+\item Например, если вершина была разбита по оси X, и при этом X-компонента вектора направления луча отрицательна, то имеет смысл сначала посетить правую вершину, и только потом левую
+\pause
+\item Для этого в вершинах нужно помнить, по какой оси было разбиение
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: улучшение качества дерева}
+\begin{itemize}
+\item Уже разбиение по центру самого длинного ребра даст хорошую производительность на типичных сценах, но мы можем сделать лучше
+\pause
+\item Пусть, мы придумали, как разбить конкретную вершину на две
+\pause
+\item Как оценить качество такого разбиения?
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: улучшение качества дерева}
+\begin{itemize}
+\item Пусть есть случайный луч, пересекающий родительскую вершину
+\pause
+\item Пусть \begin{math}p_{1,2}\end{math} -- вероятность, что такой луч попадёт в первую (вторую) дочернюю вершину
+\pause
+\item Пусть \begin{math}N_{1,2}\end{math} -- количество объектов в первой (второй) дочерней вершиной
+\pause
+\item Тогда в среднем нам придётся обработать \begin{math}p_1N_1+p_2N_2\end{math} объектов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: SAH}
+\begin{itemize}
+\item Можно показать, что \begin{math}p_i = \frac{S_i}{S}\end{math}, где \begin{math}S_i\end{math} -- площадь поверхности AABB дочерней вершины, а \begin{math}S\end{math} -- площадь поверхности AABB родительской вершины
+\pause
+\item Тогда мы можем использовать величину \begin{math}S \cdot N\end{math} как \textit{стоимость} вершины
+\pause
+\item Разбиение вершины на дочерние имеет смысл, если стоимость вершины больше, чем сумма стоимости дочерних вершин
+\pause
+\item Этот подход называется \textit{surface area heuristic (SAH)}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: SAH}
+\begin{itemize}
+\item Рассмотрим идеальный случай: разбиение по центру самого длинного ребра даёт две непересекающихся дочерних вершины, не пересекающих плоскость разбиения
+\pause
+\item Тогда площадь поверхности AABB дочерних вершин \begin{math}S_{1,2} \leq \frac{2}{3}S\end{math}
+\pause
+\item И суммарная стоимость дочерних вершин: \begin{math}S_1N_1+S_2N_2 \leq \frac{2}{3}S\frac{1}{2}N_1+\frac{2}{3}S\frac{1}{2}(N-N_1) = \frac{2}{3}SN\end{math}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Стоимость разбиения меньше стоимости родительской вершины
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: SAH}
+\begin{itemize}
+\item Мы научились измерять качество конкретного разбиения
+\pause
+\item Как найти идеальное разбиение? \pause Перебором!
+\pause
+\item Переберём все 3 возможных оси разбиения
+\pause
+\item Отсортируем объекты данной вершины в порядке возрастания i-ой координаты центра объекта (или его AABB), где i -- выбранная ось разбиение
+\pause
+\item Для каждой оси у нас есть \begin{math}N-1\end{math} вариантов разбиения (первые \begin{math}K\end{math} объектов идут в левую вершину, оставшиеся \begin{math}N-K\end{math} -- в правую)
+\pause
+\item Вычислим стоимость разбиения для всех этих вариантов и возьмём минимальный
+\pause
+\item Если стоимость минимального разбиения всё ещё выше стоимости самой вершины, не производим разбиение
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: SAH}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для вычисления стоимости всех \begin{math}N-1\end{math} разбиений нам нужно знать площади поверхности соответствующих AABB
+\pause
+\item AABB всех объектов с первого до K-ого можно вычислить за один проход для всех K, как префиксную сумму:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|aabb_left[0] = empty|
+\pause
+\item \mintinline{cpp}|aabb_left[i] = union(aabb_left[i-1], object[i-1].aabb)|
+\end{itemize}
+\pause
+\item Аналогично можно вычислить AABB всех объектов от K-ого до последнего за один проход в обратном порядке
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: binned SAH}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Итоговая стоимость разбиения вершины \begin{math}O(n\cdot \log n)\end{math} (сортировка) и построения дерева \begin{math}O(n\cdot \log^2 n)\end{math}
+\pause
+\item Построение BVH работает в целом достаточно быстро (порядка 100ms на 100k вершин), но хочется быстрее
+\pause
+\item Binning-эвристика: вместо проверки всех возможных разбиений, проверим фиксированное количество (напр. 8 или 16) разбиений с фиксированным шагом
+\pause
+\item Большая серия статей про построение BVH для рейтрейсинга: \href{https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/}{\texttt{jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{BVH: применение}
+\begin{itemize}
+\item При вычислении пересечения луча со сценой, проходим отдельно по всем бесконечным объектам, а для конечных объектов обходим BVH
+\pause
+\item При multiple importance sampling'е источников света, для вычисления правильной вероятности направления, нам нужно найти все источники света, пересекающие луч из текущей точки в этом направлении
+\pause
+\item Лучше для источников света завести отдельную, независимую BVH (и \textbf{не делать} early-out при её обходе, так как нам нужны \textbf{все} пересечения, а не ближайшее)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Распараллеливание}
+\begin{itemize}
+\item Чтобы распараллелить рендеринг на несколько потоков, нужно сначала разбить его на независимые подзадачи
+\pause
+\item Можно выбрать разную гранулярность подзадач:
+\pause
+\begin{itemize}
+\item Подзадача -- большой кусок изображения
+\pause
+\item Подзадача -- одна строка изображения
+\pause
+\item Подзадача -- маленький (8x8) тайл изображения
+\pause
+\item Подзадача -- один пиксель
+\pause
+\item Подзадача -- один семпл в пикселе
+\pause
+\item Подзадача -- один луч
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Распараллеливание: гранулярность}
+\begin{itemize}
+\item Подбирать гранулярность нужно из нескольких соображений
+\pause
+\item Нужно максимизировать равномерность нагрузки на разные подзадачи (чтобы не простаивали потоки, справившиеся раньше других)
+\pause
+\begin{itemize}
+\item \begin{math}\Longrightarrow\end{math} Разбиение на большие куски или даже строки изображения нам не подходит: в одном куске может оказаться намного больше объектов, чем в другом
+\end{itemize}
+\pause
+\item Нужно минимизировать необходимость синхронизации
+\pause
+\begin{itemize}
+\item \begin{math}\Longrightarrow\end{math} Разбиение на отдельные лучи не подходит: лучу придётся ждать рекурсивно вызванный луч
+\end{itemize}
+\pause
+\item Нужно максимизировать локальность данных
+\pause
+\begin{itemize}
+\item \begin{math}\Longrightarrow\end{math} Разбиение на отдельные семплы не подходит: все семплы одного пикселя будут обращаться +/- к одним и тем же данным, лучше их сгруппировать в одну подзадачу
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Распараллеливание: тайлы}
+\begin{itemize}
+\item Стандартный выбор при рейтрейсинге -- гранулярность на уровне пикселей или небольших (8x8) тайлов пикселей
+\pause
+\item Пиксели тайла объединяются в одну подзадачу из тех же соображений, что и семплы одного пикселя
+\pause
+\item Выигрыш от тайлов становится заметен на очень больших сценах (десятки-сотни миллионов вершин), когда сцена уже не влезает ни в какие кеши CPU
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Распараллеливание: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Нужно придумать уникальное описание конкретной подзадачи (напр. ID пикселя), и завести синхронизированную очередь всех подзадач
+\pause
+\item Нужно создать N потоков (где N -- количество ядер процессора, напр. \mintinline{cpp}|std::thread::hardware_concurrency|), которые будут по одной доставать подзадачи из очереди и выполнять их
+\pause
+\item В C++ это можно легко сделать с помощью OpenMP (нужно будет добавить его в CMakeLists) директивой \mintinline{cpp}|#pragma omp parallel for|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Распараллеливание: pitfalls}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Нужно убедиться, что все подзадачи независимы, и не перезатирают данные друг друга (напр. разные потоки не пишут в один и тот же пиксель)
+\pause
+\item Нужно убедиться в потокобезопасности сцены и BVH (их непросто сделать потоконебезопасными, -- например, неаккуратно что-нибудь кешируя)
+\pause
+\item Нужно убедиться, что разные потоки используют разные и по-разному проинициализированные генераторы случайных чисел (можно их проинициализировать, используя ID потока или ID подзадачи)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Оптимизации: результат}
+\slideimage{dragon_100k.png}
+\centerline{100k faces, 1024x1024, 512 spp, 180 s}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Оптимизации: результат}
+\slideimage{dragon_100k_metal.png}
+\centerline{100k faces, 1024x1024, 512 spp, 160 s}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Оптимизации: результат}
+\slideimage{dragon_100k_glass.png}
+\centerline{100k faces, 1024x1024, 512 spp, 300 s}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Оптимизации: результат}
+\slideimage{dragon_100k_glow.png}
+\centerline{100k faces, 1024x1024, 512 spp, 1000 s}
+\end{frame}
+
+\end{document}
