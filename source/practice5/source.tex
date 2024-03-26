@@ -1,0 +1,134 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt,handout]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Практика 5}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Описание практики}
+Задачи этой практики:
+\begin{itemize}
+\item Поддержать треугольники в качестве геометрических примитивов
+\item Реализовать BVH с использованием SAH (можно binning, можно полный перебор)
+\item Использовать BVH для пересечения луча со сценой и для вычисления pdf при light sampling'е
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат сцены: новые команды}
+\begin{itemize}
+\item \texttt{TRIANGLE X1 Y1 Z1 X2 Y2 Z2 X3 Y3 Z3} -- (после команды \texttt{NEW\_PRIMITIVE}) задать геометрию объекта -- треугольник с заданными координатами вершин
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Примеры сцены}
+\begin{scriptsize}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice5_1.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_1.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice5_2.txt}{\texttt{slides/tree/trunk/example\_scenes/practice3\_2.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice5_dragon_10k.txt}{\texttt{slides/tree/trunk/example\_scenes/practice5\_dragon\_10k.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice5_dragon_100k.txt}{\texttt{slides/tree/trunk/example\_scenes/practice5\_dragon\_100k.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice5_dragon_100k_metal.txt}{\texttt{slides/tree/trunk/example\_scenes/practice5\_dragon\_100k\_metal.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice5_dragon_100k_glass.txt}{\texttt{slides/tree/trunk/example\_scenes/practice5\_dragon\_100k\_glass.txt}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice5_dragon_100k_glow.txt}{\texttt{slides/tree/trunk/example\_scenes/practice5\_dragon\_100k\_glow.txt}}
+\end{scriptsize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены №1}
+\begin{figure}
+\slideimage{practice5_1.png}
+\end{figure}
+\centerline{6 s}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены №2}
+\begin{figure}
+\slideimage{practice5_2.png}
+\end{figure}
+\centerline{14 s}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены dragon 10k}
+\begin{figure}
+\slideimage{dragon_10k.png}
+\end{figure}
+\centerline{120 s}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены dragon 100k}
+\begin{figure}
+\slideimage{dragon_100k.png}
+\end{figure}
+\centerline{180 s}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены dragon 100k metal}
+\begin{figure}
+\slideimage{dragon_100k_metal.png}
+\end{figure}
+\centerline{160 s}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены dragon 100k glass}
+\begin{figure}
+\slideimage{dragon_100k_glass.png}
+\end{figure}
+\centerline{300 s}
+\end{frame}
+
+\begin{frame}
+\frametitle{Пример сцены dragon 100k glow}
+\begin{figure}
+\slideimage{dragon_100k_glow.png}
+\end{figure}
+\centerline{1000 s}
+\end{frame}
+
+\end{document}
