@@ -1,6 +1,6 @@
 % (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
 
-\documentclass[10pt]{beamer}
+\documentclass[handout,10pt]{beamer}
 
 \usepackage[T2A]{fontenc}
 \usepackage[russian]{babel}
@@ -505,7 +505,7 @@ BVH::build_node(vector<Primitive> & primitives,
 \pause
 \item Эллипсоид -- берём его радиусы, они описывают нужный AABB
 \pause
-\item Треугольник -- вычисляем минимальные и макимальные значения координат по всем трём осям
+\item Треугольник -- вычисляем минимальные и максимальные значения координат по всем трём осям
 \end{itemize}
 \end{frame}
 
@@ -529,7 +529,7 @@ struct AABB
     glm::vec3 min;
     glm::vec3 max;
 
-    void extend(vec3 p)
+    void extend(glm::vec3 p)
     {
         min = glm::min(min, p);
         max = glm::max(max, p);
