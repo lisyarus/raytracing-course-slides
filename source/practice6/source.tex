@@ -1,0 +1,105 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt,handout]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Практика 6}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Описание практики}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Единственная задача практики -- перевести рейтрейсер на формат сцен glTF
+\item Меняются аргументы командной строки: теперь скрипт \mintinline{cpp}|run.sh| будет запускаться как
+\mintinline{cpp}|./run.sh <input-scene> <width> <height> <samples> <output-image>|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Советы}
+\begin{itemize}
+\item Имеет смысл обрабатывать сцену в таком порядке:
+\begin{itemize}
+\item Загрузить все бинарные буферы
+\item Пройтись по всем нодам
+\item Вычислить преобразования нод с учётом их родителей
+\item Загрузить все меши из нод
+\item Загрузить все материалы
+\item Вычислить камеру
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Советы}
+\begin{itemize}
+\item Не забывайте про всевозможные дефолты разных полей
+\item Смотрите внимательно спецификацию формата, в ней всё подробно написано
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Примеры сцены}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice6_1.gltf}{\texttt{slides/tree/trunk/example\_scenes/practice6\_1.gltf}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice6_2.gltf}{\texttt{slides/tree/trunk/example\_scenes/practice6\_2.gltf}}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №1}
+\slideimage{practice6_1.png}
+\begin{center}256 spp\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №1 (Blender)}
+\slideimage{practice6_1_cycles.png}
+\begin{center}256 spp\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №2}
+\slideimage{practice6_2.png}
+\begin{center}1024 spp\end{center}
+\end{frame}
+
+\end{document}

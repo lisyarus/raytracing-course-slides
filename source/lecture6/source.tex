@@ -1,0 +1,747 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Лекция 6: Alias method, bidirectional path tracing, Metropolis light transport, формат glTF}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Importance sampling lights}
+\begin{itemize}
+\item При importance sampling мы выбирали случайный источник равновероятно
+\pause
+\item Это не всегда самая лучшая стратегия:
+\pause
+\begin{itemize}
+\item Источники отличаются размером
+\pause
+\item Источники отличаются яркостью
+\end{itemize}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Хочется какую-то эвристику
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Weighted lights sampling}
+\begin{itemize}
+\item В качестве эвристического веса \begin{math}w_i\end{math} источника света можно взять
+\pause
+\begin{itemize}
+\item Яркость источника
+\pause
+\item Площадь поверхности источника
+\pause
+\item Их произведение
+\end{itemize}
+\pause
+\item Вероятность выбрать конкретный источник равна
+\begin{equation*}p_i = \frac{w_i}{\sum w_j}\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Uniform lights sampling}
+\slideimage{uniform_lights.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Weighted lights sampling}
+\slideimage{weighted_lights.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Weighted lights sampling}
+\begin{itemize}
+\item Для семплинга источников света с учётом такой эвристики, нужно уметь семплить произвольное дискретное распределение, заданное набором вероятностей
+\pause
+\item Эта операция выполняется почти на каждый луч \begin{math}\Longrightarrow\end{math} хочется делать это быстро
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Weighted sampling: постановка задачи}
+\begin{itemize}
+\item Есть дискретное распределение с заданными вероятностями исходов \begin{math}p_i\end{math} для \begin{math}i \in \{1\dots N\}\end{math}
+\pause
+\item Хотим научиться семплить случайную величину \begin{math}X\end{math} такую, что \begin{math}\mathbb{P}(X = i) = p_i\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Weighted sampling: линейный алгоритм}
+\begin{itemize}
+\item Генерируем случайную величину \begin{math}U \sim U(0, 1)\end{math}
+\pause
+\item Если \begin{math}U \leq p_1\end{math}, возвращаем \begin{math}X = 1\end{math}
+\pause
+\item Если \begin{math}p_1 < U \leq p_1 + p_2\end{math}, возвращаем \begin{math}X = 2\end{math}
+\pause
+\item Если \begin{math}p_1 + p_2 < U \leq p_1 + p_2 + p_3\end{math}, возвращаем \begin{math}X = 3\end{math}
+\pause
+\item И т.д.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Weighted sampling: линейный алгоритм}
+\begin{itemize}
+\item Есть разные варианты реализации:
+\pause
+\begin{itemize}
+\item Можно считать сумму вероятностей всех посещённых индексов в процессе семплинга
+\pause
+\item Можно заранее предподсчитать префиксные суммы \begin{math}s_k = \sum\limits_{i=1}^k p_i\end{math}
+\pause
+\item Можно вычитать вероятности посещённых индексов из \begin{math}U\end{math}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Weighted sampling: логарифмический алгоритм}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Линейная сложность -- очень медленно, если источников света много
+\pause
+\item Если заранее предподсчитать префиксные суммы, то нужный индекс можно найти бинарным поиском
+\pause
+\item Находим минимальный \begin{math}i\end{math} такой, что \begin{math}U \leq s_i\end{math}
+\pause
+\item В C++ это \mintinline{cpp}|std::upper_bound|
+\pause
+\item Сложность такого подхода -- логарифм от числа источников света
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Weighted sampling: alias method}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Логарифм -- уже очень хорошо, но не идеально
+\pause
+\begin{itemize}
+\item Сложность всё ещё растёт с числом источников света
+\pause
+\item Бинарный поиск плохо дружит с кешами памяти, так как делает много практически случайных обращений к массиву
+\end{itemize}
+\pause
+\item Есть метод, работающий за константное время с линейной предобработкой: \textit{alias method}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Alias method (Walker, 1974)}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Рассмотрим особый класс дискретных распределений, заданных двумя массивами \begin{math}q_i \in [0, 1]\end{math} \textit{(probability table)} и \begin{math}k_i \in \{1\dots N\}\end{math} \textit{(alias table)} и алгоритмом семплинга:
+\pause
+\begin{itemize}
+\item Генерируем равномерно \begin{math}i \in \{1\dots N\}\end{math} и \begin{math}u \in [0, 1]\end{math}
+\pause
+\item Если \begin{math}u \leq p_i\end{math}, возвращаем \begin{math}i\end{math}
+\pause
+\item Иначе, возвращаем \begin{math}k_i\end{math}
+\end{itemize}
+\pause
+\item Утверждение: \textbf{любое} дискретное распределение можно привести к такому виду
+\pause
+\item Элемент \begin{math}k_i\end{math} называется \textit{alias'ом} элемента \begin{math}i\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Alias method: доказательство}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item 1. Положим \begin{math}q_i = N \cdot p_i\end{math} и \begin{math}k_i = i\end{math}
+\pause
+\item Заметим, что \begin{math}\sum q_i = N \cdot \sum p_i = N\end{math}
+\pause
+\item 2. Если все \begin{math}q_i = 1\end{math}, то все \begin{math}p_i = \frac{1}{N}\end{math}, и алгоритм можно завершить
+\pause
+\item 3. Иначе, выберем \begin{math}q_i < 1\end{math} и \begin{math}q_j > 1\end{math}
+\pause
+\begin{itemize}
+\item Они существуют из-за того, что \begin{math}\sum q_i = N\end{math}
+\end{itemize}
+\pause
+\item 4. `Откусим' часть вероятности \begin{math}q_j\end{math}, чтобы дополнить ей \begin{math}q_i\end{math}:
+\pause
+\begin{itemize}
+\item 4.1. Положим \begin{math}k_i = j\end{math}
+\pause
+\item 4.2. Обновим \begin{math}q_j \leftarrow q_j - (1 - q_i)\end{math}
+\end{itemize}
+\pause
+\item 5. Удалим \begin{math}i\end{math}-ый элемент из рассмотрения
+\pause
+\item Сумма \begin{math}q_i\end{math} для оставшихся элементов равна \begin{math}N - q_i - (1 - q_i) = N - 1\end{math}
+\pause
+\item 6. \begin{math}\Longrightarrow\end{math} Инвариант на сумму \begin{math}q_i\end{math} сохранился, возвращаемся к пункту 2
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Alias method: алгоритм}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Приведённое доказательство конструктивно, и уже является алгоритмом построения массивов \begin{math}q_i\end{math} и \begin{math}k_i\end{math}
+\pause
+\item Однако, на каждом шаге нам нужно за линейное время искать элементы \begin{math}q_i < 1\end{math} и \begin{math}q_j > 1\end{math} \begin{math}\Longrightarrow\end{math} квадратичная сложность предподсчёта
+\pause
+\item К тому же, алгоритм страдает от ошибок округления: инвариант \begin{math}\sum q_i = N\end{math} может нарушиться, и один из элементов \begin{math}q_i, q_j\end{math} может не найтись
+\pause
+\item Вместо линейного поиска можно хранить две очереди с элементами меньше и больше 1
+\pause
+\item Можно заменить вычисление \begin{math}q_j - (1 - q_i)\end{math} численно более стабильным \begin{math}(q_j + q_i) - 1\end{math}
+\pause
+\item \begin{math}\Longrightarrow\end{math} \textit{Vose alias method}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Vose alias method (Vose, 1991)}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item 1. Положим \begin{math}q_i = N \cdot p_i\end{math}
+\pause
+\item 2. Заведём две очереди:
+\pause
+\begin{itemize}
+\item 2.1. \begin{math}\operatorname{small}\end{math} с индексами, для которых \begin{math}q_i < 1\end{math}
+\pause
+\item 2.2. \begin{math}\operatorname{large}\end{math} с индексами, для которых \begin{math}q_i \geq 1\end{math}
+\end{itemize}
+\pause
+\item 3. Пока обе очереди не пусты:
+\pause
+\begin{itemize}
+\item 3.1. Достанем элементы \begin{math}i \in \operatorname{small}\end{math} и \begin{math}j \in \operatorname{large}\end{math}
+\pause
+\item 3.2. Положим \begin{math}k_i = j\end{math}
+\pause
+\item 3.3. Обновим \begin{math}q_j \leftarrow (q_i + q_j) - 1\end{math}
+\pause
+\item 3.4. Если \begin{math}q_j < 1\end{math}, положим \begin{math}j\end{math} в \begin{math}\operatorname{small}\end{math}, иначе -- в \begin{math}\operatorname{large}\end{math}
+\end{itemize}
+\pause
+\item 4. Если одна из очередей опустела, то для всех элементов второй очереди положим \begin{math}q_i = 1\end{math} и \begin{math}k_i = i\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Alias method: визуальная интерпретация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item У этого метода есть забавная визуальная интерпретация в терминах разрезания и запаковки прямоугольников
+\end{itemize}
+\slideimage{alias.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Alias method}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Alias-таблица для конкретного распределения \textit{не уникальна}
+\pause
+\item Семплинг работает чуть быстрее, если пытаться максимизировать значения \begin{math}q_i\end{math} (будет меньше обращений к массиву \begin{math}k_i\end{math})
+\pause
+\item Построение оптимальных массивов \begin{math}q_i\end{math} и \begin{math}k_i\end{math} -- \textbf{NP-трудная} задача
+\pause
+\item Можно использовать жадный алгоритм, всегда выбирая \begin{math}i\in\operatorname{small}\end{math} с наибольшим \begin{math}q_i\end{math} и \begin{math}j\in\operatorname{large}\end{math} с наименьшим \begin{math}q_j\end{math} -- для этого нужны приоритетные очереди, и время предобработки вырастает до \begin{math}O(N \cdot \log N)\end{math}
+\pause
+\item Очень подробная статья с выводом алгоритма: \href{https://www.keithschwarz.com/darts-dice-coins}{\texttt{keithschwarz.com/darts-dice-coins}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Unidirectional path tracing}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Алгоритм, который мы используем, называется \textit{unidirectional path tracing}: мы генерируем случайный \underline{путь} света в \textit{одном направлении}, т.е. из камеры в сцену
+\pause
+\item Многие индустриальные рейтрейсеры используют этот алгоритм (напр. движок Cycles в Blender'е)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Unidirectional path tracing}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Recap: генерировать путь из источника света -- плохая идея: он вряд ли (с вероятностью 0) попадёт в камеру
+\pause
+\item Recap: генерировать путь из камеры -- плохая идея: он может не попасть в источник света
+\pause
+\item Мы решили вторую проблему importance sampling'ом, но он не всегда поможет
+\pause
+\item Например, источник света закрыт большим числом другой геометрии, или спрятан за сильно неоднородным стеклом (\textit{frosted glass})
+\pause
+\item \begin{math}\Longrightarrow\end{math} \textit{Bidirectional path tracing (BDPT)}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Bidirectional path tracing (Pixar RenderMan)}
+\slideimage{bidirectional_1.jpg}
+\end{frame}
+
+\begin{frame}
+\frametitle{Bidirectional path tracing (Veach, 1997)}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Возьмём area formulation уравнения рендеринга и переформулируем его как интеграл по \textit{всем возможным путям}, которыми свет может пройти от источников света до камеры
+\pause
+\item Нужно аккуратно формализовать пространство путей: возьмём объединение пространств всех путей конечной длины
+\pause
+\item Нужно аккуратно формализовать меру на путях фиксированной длины \begin{math}N\end{math}: она берётся как \begin{math}N\end{math}-кратное произведение мер площади на поверхностях объектов
+\pause
+\item Нужно аккуратно написать сам интеграл: в него будут входить значения BRDF промежуточных точек, а также \textit{geometry terms}
+\pause
+\item Нужно придумать, как семплить произвольные пути, и как считать их вероятности для Монте-Карло интегрирования
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Path integral formulation}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Пусть мы сгенерировали путь \begin{math}p_0 p_1 p_2 \dots p_N\end{math}
+\pause
+\item Из точки \begin{math}p_0\end{math} в направлении точки \begin{math}p_1\end{math} излучилось \begin{math}L_e(p_0 \rightarrow p_1)\end{math} света
+\pause
+\item Путь \begin{math}p_0 \rightarrow p_1\end{math} мог быть чем-то закрыт, за что отвечает \textit{visibility term} \begin{math}V(p_0\rightarrow p_1)\end{math}
+\pause
+\item Нужно учесть преобразование координат интегрирования из направлений на сфере в точки на поверхности: \begin{equation*}\frac{\|\cos \theta_o(p_0) \cos\theta_i(p_1)\|}{\|p_1 - p_0\|^2}\end{equation*}
+\pause
+\item Вместе с \begin{math}V(p_0\rightarrow p_1)\end{math} это даст \textit{geometry term} \begin{math}G(p_0\rightarrow p_1)\end{math}
+\pause
+\item Нужно учесть BRDF \begin{math}f(p_0\rightarrow p_1 \rightarrow p_2)\end{math} в точке \begin{math}p_1\end{math} для света, пришедшего из \begin{math}p_0\end{math} и уходящего в \begin{math}p_2\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Path integral formulation}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item В итоге, количество света, полученного из этого пути, равно
+\end{itemize}
+\begin{gather*}
+L_e(p_0\rightarrow p_1)\cdot G(p_0\rightarrow p_1) \cdot \\
+\cdot f(p_0\rightarrow p_1\rightarrow p_2) \cdot G(p_1\rightarrow p_2) \cdot \\
+\cdot f(p_1\rightarrow p_2\rightarrow p_3) \cdot G(p_2\rightarrow p_3) \cdot \\
+\dots \\
+\cdot f(p_{N-2}\rightarrow p_{N-1}\rightarrow p_N) \cdot G(p_{N-1}\rightarrow p_N)
+\end{gather*}
+\end{frame}
+
+\begin{frame}
+\frametitle{Bidirectional path tracing}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Как генерировать случайные пути?
+\pause
+\item Один из вариантов:
+\pause
+\begin{itemize}
+\item Сгенерировать случайный путь \begin{math}p_0\dots p_S\end{math} из источника света
+\pause
+\item Сгенерировать случайный путь \begin{math}q_0\dots q_T\end{math} из камеры
+\pause
+\item Склеить их в путь \begin{math}p_0\dots p_S q_T \dots q_0\end{math} 
+\end{itemize}
+\pause
+\item На каждом шаге генерации пути останавливаемся с некоторой вероятностью \begin{math}p\end{math} (тогда \begin{math}\frac{1}{p}\end{math} -- средняя длина пути)
+\pause
+\item Генерировать путь можно, пуская лучи из очередной точки в случайном направлении (можно с importance sampling'ом BRDF, например cosine-weighted для диффузных материалов)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Bidirectional path tracing}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Вместо того, чтобы обработать путь \begin{math}p_0\dots p_S q_T \dots q_0\end{math} и выбросить, мы можем дополнительно попарно склеить все префиксы пути \begin{math}p_0\dots p_S \end{math} со всеми префиксами \begin{math}q_0\dots q_T\end{math} и получить квадратичное число путей
+\pause
+\item BDPT позволяет улучшить сходимость Монте-Карло интегрирования, и позволяет обрабатывать гораздо более сложные сцены
+\pause
+\item BDPT заметно сложнее в реализации
+\pause
+\item \textbf{\alert{N.B.}}: Существуют сцены, для которых задача решения уравнения рендеринга \textbf{алгоритмически неразрешима} (см. Reif et al. 1994)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Bidirectional path tracing (Pixar RenderMan)}
+\slideimage{bidirectional_2.jpg}
+\end{frame}
+
+\begin{frame}
+\frametitle{Bidirectional path tracing (Sohil Shah)}
+\slideimage{bidirectional_3.jpg}
+\end{frame}
+
+\begin{frame}
+\frametitle{Bidirectional path tracing (Sohil Shah)}
+\slideimage{bidirectional_4.jpg}
+\end{frame}
+
+\begin{frame}
+\frametitle{Bidirectional path tracing: ссылки}
+\begin{itemize}
+\item \href{https://graphics.stanford.edu/papers/veach_thesis/thesis.pdf}{\texttt{Eric Veach PhD thesis, 1997}} (chapters 8-10)
+\item \href{https://graphics.stanford.edu/courses/cs348b-03/papers/mc-course.pdf}{\texttt{Stanford raytracing course notes}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Metropolis light transport}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Path integral formulation превращает задачу рендеринга в вычисление интеграла многомерной (вообще говоря, бесконечномерной) функции
+\pause
+\item Для этой общей задачи известны хорошие методы, такие как алгоритм Метрополиса-Гастингса
+\pause
+\item Комбинация этого алгоритма с path integral formulation даёт подход, известный как \textit{metropolis light transport}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Алгоритм Метрополиса-Гастингса}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Пусть, есть распределение вероятности \begin{math}p(x)\end{math} (на каком-то множестве), которое мы знаем с точностью до постоянного множителя (т.е. не знаем нормировку)
+\pause
+\item Другими словами, мы знаем некоторую функцию \begin{math}f(x) = C\cdot p(x)\end{math}, но не знаем \begin{math}C\end{math}
+\pause
+\item Мы хотим генерировать случайные семлы \begin{math}X\end{math} с вероятностью \begin{math}p(x)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Алгоритм Метрополиса-Гастингса}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Выберем какой-нибудь первый семпл \begin{math}X_0\end{math}
+\pause
+\item Выберем некоторое распределение \begin{math}g(x \rightarrow y)\end{math} (\textit{proposal function}), которое по текущей точке \begin{math}x\end{math} будет генерировать следующую точку \begin{math}y\end{math}
+\pause
+\item Proposal function должна быть симметричной: \begin{math}g(x \rightarrow y) = g(y \rightarrow x)\end{math}
+\pause
+\item Далее в цикле:
+\pause
+\begin{itemize}
+\item Генерируем новый семпл \begin{math}Y\end{math} используя proposal распределение \begin{math}g(X_i \rightarrow Y)\end{math}
+\pause
+\item Вычисляем \textit{acceptance ratio} \begin{math}\alpha = \frac{f(Y)}{f(X_i)}\end{math}
+\pause
+\item С вероятностью \begin{math}\min(\alpha, 1)\end{math} положим \begin{math}X_{i+1} = Y\end{math}, иначе \begin{math}X_{i+1} = X_i\end{math}
+\end{itemize}
+\pause
+\item Тогда последовательность семплов \begin{math}\{X_i\}\end{math} в пределе стремится к распределению \begin{math}p(x)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Алгоритм Метрополиса-Гастингса}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Если \begin{math}f(Y) > f(X_i)\end{math}, то \begin{math}\alpha > 1\end{math}, и новый семпл будет всегда принят \begin{math}X_{i+1} = Y\end{math}
+\pause
+\item Чем меньше отношение \begin{math}\alpha = \frac{f(Y)}{f(X_i)}\end{math}, тем меньше вероятность, что семпл будет принят
+\pause
+\item Интуитивно, алгоритм идёт в направлении увеличения веса семплов, иногда заходя в регионы с меньшей вероятностью
+\pause
+\item Если случайная величина задана на \begin{math}\mathbb R^n\end{math}, в качестве \begin{math}g(x \rightarrow y)\end{math} часто берут Гауссово распределение \begin{math}g(x \rightarrow y) \sim \exp(-\|x-y\|^2)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Алгоритм Метрополиса-Гастингса}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Алгоритм очень чувствителен к выбору первого семпла \begin{math}X_0\end{math} (\textit{start-up bias}), поэтому часто используют \textit{burn-in period}: большое количество первых семплов выкидывают
+\pause
+\item Последовательные семплы алгоритма скоррелированы, что может негативно влиять на результат вычислений
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Метрополис-Гастингс + Монте-Карло интегрирование}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Хотим вычислить интеграл \begin{math}I=\int f(x)dx\end{math} от некоторой функции \begin{math}f(x)\end{math}
+\pause
+\item Выбираем плотность вероятности \begin{math}p(x)\end{math}, похожую на нашу функцию, которую мы умеем нормировать
+\pause
+\item Используем алгоритм Метрополиса-Гастингса с плотностью \begin{math}p(x)\end{math}
+\pause
+\item Делаем burn-in, вхолостую генерируя набор семплов
+\pause
+\item После чего генерируем \begin{math}N\end{math} семплов
+\pause
+\item Аппроксимируем интеграл как
+\begin{equation*}I \approx \frac{1}{N}\sum \frac{f(X_i)}{p(X_i)}\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Метрополис-Гастингс + Монте-Карло + importance sampling}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Хотим вычислить интеграл \begin{math}I=\int f(x)g(x)dx\end{math} от произведения некоторых функций
+\pause
+\item Выбираем плотность вероятности \begin{math}p(x) \sim f(x)\end{math}, пропорциональную \begin{math}f(x)\end{math}
+\begin{equation*}p(x) = \frac{f(x)}{\int f(y)dy}\end{equation*}
+\pause
+\item Используем алгоритм Метрополиса-Гастингса с плотностью \begin{math}f(x)\end{math}
+\pause
+\item Делаем burn-in, вхолостую генерируя набор семплов
+\pause
+\item Генерируем \begin{math}N\end{math} семплов
+\pause
+\item Аппроксимируем интеграл как
+\begin{equation*}I \approx \frac{1}{N}\sum \frac{f(X_i)g(X_i)}{p(X_i)} = \left[\frac{1}{N}\sum g(X_i)\right]\cdot \left[\int f(x) dx\right]\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Metropolis light transport}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Нужно придумать, какую использовать плотность вероятности (возможно, пропорциональную какому-то множителю), и учесть то, что мы не знаем нормировки (возможно, её легче почитать через BDPT)
+\pause
+\item Нужно сгенерировать первый путь (семпл), например, так же, как в BDPT
+\pause
+\item Нужно придумать proposal distribution -- случайные мутации пути
+\pause
+\item \href{https://graphics.stanford.edu/papers/metro/metro.pdf}{\texttt{Veach, Guibas - Metropolis Light Transport}}
+\item \href{https://www.pbr-book.org/3ed-2018/Light_Transport_III_Bidirectional_Methods/Metropolis_Light_Transport}{\texttt{PBR Book: Metropolis Light Transport}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF}
+\begin{itemize}
+\item Один из самых распространённых сегодня форматов описания трёхмерных сцен
+\pause
+\item Поддерживает иерархии объектов и их преобразований
+\pause
+\item Поддерживает текстуры и сложные материалы
+\pause
+\item Поддерживает анимированные объекты
+\pause
+\item Поддерживает источники света (в виде расширения)
+\pause
+\item Удобен для загрузки на GPU для рендеринга (например, через OpenGL или Vulkan)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF}
+\begin{itemize}
+\item Особенность формата в том, что он хранит метаинформацию (описание дерева объектов, и т.д.) в текстовом виде (в JSON'е), а бинарные данные (координаты отдельных вершин, индексы вершин, keyframe'ы анимаций) -- в сыром бинарном виде
+\pause
+\item Бинарные данные обычно представлены ссылкой на внешний источник (файл, URL, etc)
+\pause
+\item Есть вариация формата (GLB), которая склеивает JSON и бинарные данные в один файл
+\pause
+\item \href{https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html}{\texttt{Ссылка на спецификацию формата}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: структура}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Объект формата glTF -- это JSON-объект, большинство полей которого это массивы объектов определённого \textit{типа}: nodes, meshes, accessors, buffers, bufferViews, materials, cameras, ...
+\pause
+\item Объекты ссылаются друг на друга с помощью индексов в эти массивы
+\pause
+\item Ноды образуют виртуальное дерево объектов сцены (необязательно видимых объектов), и могут содержать другие ноды в качестве детей
+\pause
+\item Каждая нода может иметь матрицу преобразования относительно родительской ноды (или относительно центра сцены, если это корневая нода)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: структура}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Нода может иметь меш (тогда эта нода подлежит рисованию)
+\pause
+\item Меш содержит несколько примитивов, каждый из которых имеет свой материал и набор вершин
+\pause
+\item Позиции вершин и индексы вершин в треугольниках описываются \textit{аксессорами}
+\pause
+\item Аксессоры задают тип и формат данных, и ссылаются на buffer view, которые ссылаются на буфер с бинарными данными
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: структура}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Нода может содержать камеру -- тогда позиция и ориентация этой ноды задают позицию и ориентацию камеры
+\pause
+\item Вид и параметры проекции камеры задаются соответствующим объектом из массива cameras
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для парсинга формата нужен какой-нибудь парсер JSON
+\pause
+\item C++: Rapidjson, nlohmann/json
+\pause
+\item Rust: json-rust
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для использования в нашем рейтрейсере, нам нужно превратить glTF-сцену в
+\pause
+\begin{itemize}
+\item Набор вершин
+\pause
+\item Набор треугольников
+\pause
+\item Набор материалов
+\pause
+\item Камеру
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item В качестве камеры берём первую попавшуюся ноду с камерой (считаем, что такая нода ровно одна)
+\pause
+\item Поддерживаем только перспективную камеру
+\pause
+\item Позицию и ориентацию камеры берём из содержащей её ноды
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Треугольник описывается тройкой индексов вершин и индексом материала
+\pause
+\item Можно хранить разные объекты (ноды/меши/примитивы) отдельно, а можно слить всё в одну кучу треугольников
+\pause
+\item В любом случае, нужно учесть преобразование ноды -- его можно применить к вершинам сразу, а можно применять обратное преобразование непосредственно при поиске пересечения
+\pause
+\item Можно построить один BVH на все треугольники, а можно разбить на отдельные TLAS + BLAS
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Преобразования нод могут быть заданы или явной матрицей \begin{math}4\times 4\end{math} (в однородных координатах), или тройкой translation-rotation-scale
+\pause
+\item Translation задаётся трёхмерным вектором
+\pause
+\item Rotation задаётся единичным кватернионом
+\pause
+\item Scale задаётся трёхмерным вектором и может описывать неизотромное масштабирование (\textit{nonuniform scaling}) -- его нужно покомпонентно умножать на координаты вершины
+\pause
+\item К преобразованию ноды нужно рекурсивно добавить преобразования всех родительских нод
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item От самих вершин нам пока нужны только координаты (не забываем к ним применить пребразование ноды)
+\pause
+\item Они могут быть заданы в большом количестве разных форматов; будем считать, что они всегда в виде трёхмерных 32-битных floating point
+\pause
+\item Также будем считать, что индексы или 16-битные, или 32-битные беззнаковые целые числа (придётся поддержать два варианта)
+\pause
+\item Обратите внимание, что byteOffset есть и в аксессорах, и в bufferView
+\pause
+\item Параметр byteStride в bufferView будем игнорировать
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item glTF поддерживает довольно сложные материалы; пока мы будем использовать только несколько параметров
+\pause
+\item \mintinline{cpp}|pbrMetallicRoughness.baseColorFactor| -- цвет материала (RGBA)
+\pause
+\item Если альфа-канал цвета меньше 1, считаем материал диэлектриком с IOR = 1.5
+\pause
+\item Если \mintinline{cpp}|pbrMetallicRoughness.metallicFactor| больше 0, считаем объект металлом
+\pause
+\item Иначе объект диффузный
+\pause
+\item В любом случае, \mintinline{cpp}|emissiveFactor| -- интенсивность излучения материала
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат glTF: реализация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Обратите внимание на многочисленные дефолты: например, \mintinline{cpp}|baseColorFactor| по умолчанию равен \mintinline{cpp}|[1, 1, 1, 1]|, а \mintinline{cpp}|metallicFactor| равен 1
+\pause
+\item По спецификации, \mintinline{cpp}|emissiveFactor| не может быть больше 1; это обходится расширением \mintinline{cpp}|KHR_materials_emissive_strength| (см. примеры сцен для практики)
+\end{itemize}
+\end{frame}
+
+\end{document}
