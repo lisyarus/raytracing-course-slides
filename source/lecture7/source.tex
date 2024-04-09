@@ -1,0 +1,716 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Лекция 7: Интерполяция нормалей, модели материалов, microfacets}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Flat/smooth shading}
+\begin{itemize}
+\item Различают два способа задания нормалей объектов:
+\pause
+\begin{itemize}
+\item \textbf{Flat shading}: нормали вычисляются как честные перпендикуляры к треугольникам
+\pause
+\item \textbf{Smooth shading}: нормали задаются в вершинах и интерполируются внутри треугольников
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat shading}
+\slideimage{sphere-flat.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Smooth shading}
+\slideimage{sphere-smooth.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading}
+\begin{itemize}
+\item Особенности \textbf{flat shading}'а:
+\pause
+\begin{itemize}
+\item Отчётливо видны треугольники модели из-за разрывов в освещённости
+\pause
+\item Не нужно хранить нормали, так как они восстанавливаются по позициям вершин
+\end{itemize}
+\pause
+\item Особенности \textbf{smooth shading'а}:
+\pause
+\begin{itemize}
+\item Объект выглядит гладко, создаётся иллюзия бóльшей детализации
+\pause
+\item Нужно хранить нормали в вершинах и интерполировать их внутри треугольников
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading}
+\begin{itemize}
+\item На практике всегда используется \textbf{smooth shading}, так как он лучше ложится на GPU:
+\pause
+\begin{itemize}
+\item Нормаль удобно хранить как атрибут вершины
+\pause
+\item Интерполяцию GPU делает за нас
+\end{itemize}
+\pause
+\item \textbf{Flat shading} на GPU требует дублирования вершин (две вершины с одинаковой позицией, но разными нормалями), либо геометрических шейдеров
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading}
+\begin{itemize}
+\item В типичной модели могут встретиться как гладкие участки, так и резкие углы
+\pause
+\item Обычно это достигается дублированием вершин в местах сгибов
+\pause
+\item В Blender'е этому соответствует режим \textit{auto smooth}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading в рейтрейсинге}
+\begin{itemize}
+\item Чтобы поддержать гладкие нормали в рейтрейсинге, нам нужно
+\pause
+\begin{itemize}
+\item 1. Прочитать нормали из входной сцены
+\pause
+\item 2. Проинтерполировать их внутри треугольников
+\pause
+\item 3. Правильно учитывать их в расчёте освещения
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading в рейтрейсинге}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item В формате glTF нормали описаны как атрибут вершин \mintinline{cpp}|NORMAL|, так же, как атрибут позиции вершин \mintinline{cpp}|POSITION|
+\pause
+\item Так же, как с позициями, будем считать, что это всегда трёхмерный вектор из 32-битных floating point чисел (\mintinline{cpp}|type == "VEC3"|, \mintinline{cpp}|componentType == 5126|)
+\pause
+\item Можно сохранить нормали в отдельном массиве (параллельно позициям вершин), а можно завести структуру для вершины
+\pause
+\item Учтите, что в дальнейшем у нас появится ещё один атрибут вершин -- текстурные координаты
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading в рейтрейсинге}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Есть два варианта организации интерполяции нормалей:
+\pause
+\begin{itemize}
+\item Возвращать из функции пересечения луча с треугольником параметры линейной интерполяции, т.е. барицентрические координаты (\begin{math}u, v\end{math} из 5ой лекции), и вычислять интерполированную нормаль там, где это нужно
+\pause
+\item Сразу вычислять интерполированную нормаль в функции пересечения
+\end{itemize}
+\pause
+\item Делайте, как вам нравится, но мне кажется, что второй способ удобнее
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading в рейтрейсинге}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item У нас есть нормали \begin{math}N_A,N_B,N_C\end{math} трёх вершин треугольника, и барицентрические координаты \begin{math}u,v\end{math} точки внутри треугольника
+\pause
+\item Как вычислить проинтерполированную нормаль?
+\pause
+\item Для сферической интерполяции между двумя точками есть явная формула -- \mintinline{cpp}|slerp| (\textit{Spherical Linear intERPolation})
+\pause
+\item Для бóльшего числа точек есть неприятные итеративные алгоритмы, не подходящие из-за низкой производительности
+\pause
+\item Обычно берут линейную интерполяцию нормалей, и нормируют получившийся вектор:
+\begin{gather*}
+N' = N_A + u\cdot (N_B - N_A) + v \cdot (N_C - N_A) \\
+N = \frac{N'}{\|N'\|}
+\end{gather*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading в рейтрейсинге}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Просто заменить плоскую нормаль на гладкую -- неправильно, так как некоторые её использования ожидают настоящую нормаль к геометрии:
+\pause
+\begin{itemize}
+\item Вычисление, пришёл луч изнутри или снаружи объекта
+\pause
+\item Вычисление вероятностей для light surface sampling'а
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Неправильное вычисление внутри/снаружи}
+\usemintedstyle{solarized-light}
+\slideimage{sphere-wrong.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Flat/smooth shading в рейтрейсинге}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Лучше всего возвращать из функции пересечения сразу две нормали: плоскую \textit{geometry normal} и проинтерполированную \textit{shading normal}:
+\pause
+\begin{itemize}
+\item \textit{Geometry normal} используется для вычислений, связанных с геометрической формой объекта
+\pause
+\item \textit{Shading normal} используется для вычислений результирующей освещённости (в формулах BRDF, отражённых/преломлённых векторов, направляющего вектора полусферы направлений, и т.д.)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Geometry (flat) normals}
+\usemintedstyle{solarized-light}
+\slideimage{geometry_normals.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Shading (smooth) normals}
+\usemintedstyle{solarized-light}
+\slideimage{shading_normals.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Модели материалов}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item До этого мы делили материалы на три типа (диффузные, металлы, диэлектрики) и обрабатывали их отдельно
+\pause
+\item Хочется научиться поддерживать более интересные материалы: шероховатый металл, пластик (непрозрачный диэлектрик), и т.п.
+\pause
+\item Хочется использовать более реалистичные модели материалов
+\pause
+\item Хочется по возможности иметь одну модель, умеющую всё это, а не обрабатывать разные случаи
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Модели материалов}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Вспомним, какие методы нам нужны от описания материала в конкретной точке:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|float brdf(vec3 L, vec3 V)| -- значение BRDF по входному (L, light) и выходному (V, view) направлениям
+\pause
+\item \mintinline{cpp}|vec3 sample(vec3 V)| -- генератор случайных семплов направлений для importance sampling'а этого материала
+\pause
+\item \mintinline{cpp}|float pdf(vec3 L)| -- плотность вероятности соответствующего семпла
+\pause
+\item \mintinline{cpp}|float eval(vec3 L, vec3 V) = brdf(L, V) / pdf(L)| -- множитель, с которым семплы в итоге войдут в формулу Монте-Карло интегрирования
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Модели материалов}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item В функцию \mintinline{cpp}|brdf| часто добавляют косинус угла падения, так как он зависит от тех же параметров и может позволить упростить формулу, -- и мы тоже это сделаем
+\pause
+\item Функция \mintinline{cpp}|eval| полезна по тем же причинам -- в ней может многое сократиться, что позволит быстрее её вычислять
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Ламбертова BRDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item \mintinline{cpp}|brdf(L, V) = color / PI * max(0, dot(L, N))|
+\pause
+\item \mintinline{cpp}|sample(V) = normalize(random_unit() + N)|
+\pause
+\item \mintinline{cpp}|pdf(L) = max(0, dot(L, N)) / PI|
+\pause
+\item \mintinline{cpp}|eval(L, V) = color|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Металлическая BRDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для идеально отражающего металла BRDF является не функцией, а обобщённой функцией
+\pause
+\item Тем не менее, её можно выразить в этом интерфейсе, зная, что вызываться будут только функции \mintinline{cpp}|sample()| и \mintinline{cpp}|eval()|
+\pause
+\item \mintinline{cpp}|sample(V) = 2 * N * dot(V, N) - V = R|
+\pause
+\item \mintinline{cpp}|eval(L, V)| = \mintinline{cpp}|color|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Металлическая BRDF: roughness}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item В реальности металлические объекты часто отражают не идеально, а с небольшим размытием
+\pause
+\item Этим управляет параметр \textit{roughness (грубость, шероховатость)}:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|roughness = 0| -- идеально отполированный материал
+\pause
+\item \mintinline{cpp}|roughness = 1| -- максимально грубый материал
+\end{itemize}
+\pause
+\item \textbf{\alert{N.B.}}: разные модели материалов по-разному интерпретируют значение \mintinline{cpp}|roughness|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Металлическая BRDF: roughness}
+\usemintedstyle{solarized-light}
+\slideimage{roughness.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Металлическая BRDF: roughness}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Есть простой способ поддержать параметр roughness в нашем интерфейсе: прибавить к направлению отражённого луча случайный вектор на сфере радиуса roughness, `размывая' его
+\pause
+\item \mintinline{cpp}|sample(V) = normalize(R + random_unit() * roughness)|
+\pause
+\item Формально, мы задали алгоритмом семплинга некое распределение направлений, и потом положили \mintinline{cpp}|brdf| равной \mintinline{cpp}|color * pdf|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Металлическая BRDF: roughness}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Это рабочая, но не очень хорошая реализация roughness:
+\pause
+\begin{itemize}
+\item Мы не знаем pdf, который пригодится для importance sampling'а (но при желании её можно явно вычислить)
+\pause
+\item Это чисто эвристическая модель, и реальные материалы ведут себя иначе
+\pause
+\item При \mintinline{cpp}|roughness| близком к 1 возникают артефакты
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Описанный подход к идеально гладким металлам плохо ложится на multiple importance sampling
+\pause
+\item В MIS мы генерируем луч одним из двух способов и вычисляем суммарную плотность вероятности
+\pause
+\item Если одно из распределений -- дискретное, то у него нет плотности вероятности \begin{math}\Longrightarrow\end{math} нам не посчитать суммарную плотность, и MIS неприменим
+\pause
+\item Проще всего это исправить, ограничив \mintinline{cpp}|roughness| каким-то значением снизу, например, \mintinline{cpp}|0.03|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Specular reflection}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Термином \textit{specular} часто называют любое неметаллическое отражение света от поверхности
+\pause
+\item Одна из первых предложенных specular brdf -- модель Фонга
+\pause
+\item \mintinline{cpp}|brdf(L, V) = reflectance * max(0, dot(L, N)) * | \mintinline{cpp}|* pow(max(0, dot(R, L)), shininess)|
+\pause
+\item У неё есть ряд недостатков:
+\pause
+\begin{itemize}
+\item Она эвристическая, и реальные материалы выглядят не так
+\pause
+\item Её тяжело нормировать (чтобы объект с \mintinline{cpp}|reflectance = 1| отражал 100\% света)
+\pause
+\item Она не удовлетворяет Helmholtz reciprocity: \mintinline{cpp}|brdf(L, V) != brdf(V, L)| (без учёта \mintinline{cpp}|dot(L, N)|)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Phong model}
+\usemintedstyle{solarized-light}
+\slideimage{phong.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Blinn-Phong specular}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Модификация specular составляющей модели Фонга
+\pause
+\item \mintinline{cpp}|brdf(L, V) = reflectance * max(0, dot(L, N)) * | \mintinline{cpp}|* pow(max(0, dot(H, N)), shininess)|
+\item \mintinline{cpp}|H = normalize(L + V)| -- \textit{halfway} вектор
+\pause
+\begin{itemize}
+\item Всё ещё эвристическая, но выглядит лучше, чем модель Фонга
+\pause
+\item Всё ещё тяжело нормировать
+\pause
+\item \textbf{Удовлетворяет} Helmholtz reciprocity
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Blinn-Phong model}
+\usemintedstyle{solarized-light}
+\slideimage{blinn-phong.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Microfacets}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Современные \textit{physically-based (PBR)} модели материалов основывают на теории \textit{микрофасетов}
+\pause
+\item Предположим, что на микро-уровне поверхность состоит из маленьких кусочков, каждый со своей нормалью
+\pause
+\item Предположим, что сами кусочки имеют какую-нибудь простую BRDF -- Ламбертову, или идеального зеркала
+\pause
+\item Вычислим BRDF макро-объекта, исходя из этой модели
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Microfacets}
+\usemintedstyle{solarized-light}
+\slideimage{microfacets.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Oren-Nayar model}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Модель \textit{Орена-Наяра} -- микрофасетная BRDF, предполагающая гауссово распределение нормалей микрофасетов с отклонением \begin{math}\sigma\end{math}, и Ламбертову BRDF микрофасетов
+\pause
+\item Есть много вариаций модели, отличающихся сложностью и точностью вычислений
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Oren-Nayar model}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item \begin{math}f(L,V) = \frac{\text{color}}{\pi}\cdot \max(0, L\cdot N)\cdot (A + B \max(0, \cos\varphi)\sin \alpha \tan \beta)\end{math}
+\item \begin{math}A = 1 - 0.5 \frac{\sigma^2}{\sigma^2 + 0.33} \quad B = 0.45 \frac{\sigma^2}{\sigma^2 + 0.09}\end{math}
+\item \begin{math}\alpha = \max(\theta_L,\theta_V) \quad \beta = \min(\theta_L,\theta_V)\end{math}
+\item \begin{math}\theta_L = \angle(L, N) \quad \theta_V = \angle(V, N)\end{math}
+\item \begin{math}\varphi\end{math} -- угол между проекциями \begin{math}L\end{math} и \begin{math}V\end{math} на плоскость, перпендикулярную \begin{math}N\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Oren-Nayar model}
+\usemintedstyle{solarized-light}
+\slideimage{oren-nayar.jpg}
+\end{frame}
+
+\begin{frame}
+\frametitle{Disney (Burley) diffuse BRDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Простая модель, подогнанная под известные базы данных материалов
+\pause
+\item \begin{math}f(L,V) = \frac{\text{color}}{\pi}\cdot F_{Schlick}(\max(0, L\cdot N))\cdot F_{Schlick}(\max(0, V\cdot N))\end{math}
+\item \begin{math}F_{Schlick}(X) = 1 + (F_{D90} - 1)(1 - X)^5\end{math}
+\item \begin{math}F_{D90} = 0.5 + 2\cdot \text{roughness}\cdot \cos^2\theta_d\end{math}
+\item \begin{math}\theta_d = \angle(L, H) = \angle(V, H)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Disney (Burley) diffuse BRDF}
+\usemintedstyle{solarized-light}
+\slideimage{burley.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Cook-Torrance specular BRDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Микрофасетная модель, предполагающая, что микрофасеты -- идеальные зеркала
+\pause
+\begin{equation*}f(L,V) = \frac{D(H)\cdot G(L,V,H)\cdot F(L, H)}{4 \cdot (L\cdot N)\cdot(V\cdot N)}\end{equation*}
+\pause
+\item \begin{math}D(H)\end{math} -- \textit{distribution term}: какой процент нормалей микрофасетов ориентированы в сторону \begin{math}H\end{math}
+\pause
+\item \begin{math}G(L,V,H)\end{math} -- \textit{geometry term}: насколько соседние микрофасеты мешают свету прийти от источника к поверхности (\textit{shadowing}) или от поверхности к наблюдателю (\textit{masking})
+\pause
+\item \begin{math}F(L,H)\end{math} -- \textit{fresnel term}: коэффициент отражения Френеля
+\pause
+\item Обычно \begin{math}D\end{math} зависит от параметра \mintinline{cpp}|roughness|, а \begin{math}G\end{math} вычисляется на основе выбранной функции \begin{math}D\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Beckmann distribution}
+\usemintedstyle{solarized-light}
+\begin{equation*}
+D(H) = \frac{\exp\left(-\frac{\tan\theta_H}{\alpha^2}\right)}{\pi\alpha^2\cos^4\theta_H}
+\end{equation*}
+\begin{itemize}
+\item \begin{math}\theta_H = \angle(H,N)\end{math}
+\item \begin{math}\alpha = \sqrt{2\sigma}\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{GGX distribution}
+\usemintedstyle{solarized-light}
+\begin{equation*}
+D(H) = \frac{\alpha^2\chi^+(H\cdot N)}{\pi\left((\alpha^2-1)(H\cdot N)^2 + 1\right)^2}
+\end{equation*}
+\begin{itemize}
+\item \begin{math}\chi^+(x) = \mathbf 1_{[0, \infty)}(x)\end{math} -- step-функция Хевисайда
+\item \begin{math}\alpha = \sqrt{2\sigma}\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Smith's geometry term}
+\usemintedstyle{solarized-light}
+\begin{gather*}
+G_1(H,X) = \frac{1}{1 + \lambda(A)} \\
+G = G_1(H,L) \cdot G_1(H,V) \\
+G' = \frac{1}{1 + G_1(H,L) + G_1(H,V)}
+\end{gather*}
+\begin{itemize}
+\item \begin{math}A = \frac{H\cdot X}{\alpha \sqrt{1 - (H\cdot X)^2}}\end{math}
+\item \begin{math}\lambda(A)\end{math} зависит от конкретного распределения нормалей \begin{math}D\end{math}
+\item \begin{math}G'\end{math} -- \textit{height-correlated} geometry term: утверждается, что такая формула более точно описывает masking и shadowing
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Smith's geometry term}
+\usemintedstyle{solarized-light}
+\begin{gather*}
+\lambda_{Beckmann}(A) = \mathbf 1_{[0, 1.6]}(A) \cdot \frac{1 - 1.259 A + 0.396 A^2}{3.535 A + 2.181 A^2} \\
+\lambda_{GGX}(A) = \frac{1}{2}\left(\sqrt{1 + \frac{1}{A^2}} - 1\right)
+\end{gather*}
+\end{frame}
+
+\begin{frame}
+\frametitle{Fresnel term}
+\usemintedstyle{solarized-light}
+\begin{gather*}
+F = F_0 + (F_{90} - F_0) \cdot (1 - H\cdot L)^5
+\end{gather*}
+\pause
+\begin{itemize}
+\item \begin{math}F_{90}\end{math} -- коэффициент отражения при взгляде параллельно поверхности (\textit{grazing incidence}), обычно равен 1
+\pause
+\item \begin{math}F_0\end{math} -- коэффициент отражения при взгляде прямо на поверхность (\textit{normal incidence})
+\pause
+\item Для металлов, \begin{math}F_0\end{math} совпадает с цветом материала
+\pause
+\item Для диэлектриков, \begin{math}F_0\end{math} зависит от коэффициента преломления и колеблется от 0.02 (вода) до 0.18 (алмаз), обычно берут значение 0.04 (соответствующее коэффициенту преломления 1.5)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Specular + diffuse}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Коэффициент Френеля \begin{math}F\end{math} показывает, как много света отразится от поверхности
+\pause
+\item В Cook-Torrance specular BRDF этот коэффициент уже есть
+\pause
+\item Можно построить BRDF для specular + diffuse, добавив к specular какую-нибудь диффузную BRDF с коэффициентом \begin{math}1-F\end{math}
+\pause
+\item Тогда коэффициент Френеля можно интерпретировать как коэффициент интерполяции между диффузной и specular BRDF (последняя -- без учёта множителя \begin{math}F\end{math})
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Sampling microfacet BRDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Чем меньше значение roughness, тем ближе specular-часть материала к идеальному зеркалу
+\pause
+\item \begin{math}\Longrightarrow\end{math} Cosine-weighted sampling плохо подходит для таких материалов
+\pause
+\item Обычно importance sampling для модели Кука-Торранса семплит нормали в соответствии с распределением D, и использует их для вычисления отражённого луча
+\pause
+\item Более точным оказывается семплить нормали с учётом \textit{geometry term}, это называется \textit{visible normal distribution (VNDF)}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{VNDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Алгоритм, основанный на преобразовании и семплинге эллипсоидов
+\pause
+\item В статье \href{https://jcgt.org/published/0007/04/01/paper.pdf}{\texttt{Heitz 2018}} есть все формулы и код для семплинга нормалей
+\pause
+\item Эту нормаль нужно использовать, чтобы отразить вектор направления луча и получить семпл направления, из которого приходит свет
+\pause
+\item Обратите внимание, что алгоритм работает в локальной системе координат, где ось \begin{math}Z = N\end{math} совпадает с shading normal, -- нужно будет преобразовать векторы из глобальной системы координат в локальную и обратно
+\pause
+\item В статье также указаны получающаяся pdf и финальное отношение brdf/pdf -- нам нужно только первое, для MIS
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{MIS}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Cosine-weighted хорошо работает для диффузных материалов
+\pause
+\item VNDF хорошо работает для specular материалов
+\pause
+\item Light sampling хорошо работает для входящего количества света
+\pause
+\item \begin{math}\Longrightarrow\end{math} Имеет смысл использовать комбинацию всех трёх с какими-то весами (например, с равными)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{glTF standard BRDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item В формате glTF (Appendix B) стандартный материал описывается как смесь диэлектрика и металла, в зависимости от параметра \mintinline{cpp}|metallicFactor|
+\pause
+\item В качестве specular BRDF берётся Cook-Torrance BRDF с GGX распределением нормалей и uncorrelated Smith's geometry term, но без коэффициента Френеля (по причинам, описанным на предыдущем слайде)
+\pause
+\item Параметр \begin{math}\alpha\end{math} для GGX полагается равным \begin{math}\text{roughness}^2\end{math}
+\pause
+\item В качестве диффузной BRDF берётся обычная Ламбертова BRDF: \begin{math}\frac{\text{baseColorFactor}}{\pi}\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{glTF standard BRDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item В качестве металлической BRDF берётся specular BRDF, умноженная на коэффициент Френеля с \begin{math}F_{90}=1\end{math} и \begin{math}F_0=\text{baseColorFactor}\end{math}
+\pause
+\item В качестве диэлектрической BRDF берётся линейная интерполяция между диффузной и specular BRDF с коэффициентом, равным коэффициенту Френеля для \begin{math}F_{90}=1\end{math} и \begin{math}F_0=0.04\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Сцена без PBR, диффузные материалы}
+\usemintedstyle{solarized-light}
+\slideimage{pbr-base.png}
+\begin{center}1024 spp\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{PBR, specular}
+\usemintedstyle{solarized-light}
+\slideimage{pbr-specular-50-vndf.png}
+\begin{center}1024 spp, roughness = 0.5\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{PBR, specular, без VNDF}
+\usemintedstyle{solarized-light}
+\slideimage{pbr-specular-0.png}
+\begin{center}1024 spp, roughness = 0\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{PBR, specular, c VNDF}
+\usemintedstyle{solarized-light}
+\slideimage{pbr-specular-0-vndf.png}
+\begin{center}1024 spp, roughness = 0\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{PBR, metallic, без VNDF}
+\usemintedstyle{solarized-light}
+\slideimage{pbr-metallic-50.png}
+\begin{center}1024 spp, roughness = 0.5\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{PBR, metallic, с VNDF}
+\usemintedstyle{solarized-light}
+\slideimage{pbr-metallic-50-vndf.png}
+\begin{center}1024 spp, roughness = 0.5\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{PBR, specular + metallic, с VNDF}
+\usemintedstyle{solarized-light}
+\slideimage{pbr-combined-vndf.png}
+\begin{center}1024 spp\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{Расширения glTF BRDF}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Стандартный материал glTF многого не умеет
+\pause
+\item Не позволяет задать отличный от 1.5 коэффициент преломления (влияет на \begin{math}F_0\end{math} диэлектриков) -- это решается расширением \texttt{KHR\_materials\_ior}
+\pause
+\item Не позволяет выключить или настроить цвет specular составляющей (например, сделать чисто Ламбертову поверхность) -- это решается расширением \texttt{KHR\_materials\_specular}
+\pause
+\item Не позволяет описать полупрозрачные материалы и преломление света -- это решается расширением \texttt{KHR\_materials\_transmission}
+\pause
+\item Мы не будем поддерживать эти расширения из-за временны́х ограничений
+\end{itemize}
+\end{frame}
+
+\end{document}

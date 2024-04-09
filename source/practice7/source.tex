@@ -1,0 +1,94 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt,handout]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Практика 7}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Описание практики}
+\usemintedstyle{solarized-light}
+В этой практике три задачи:
+\begin{itemize}
+\item 1. Поддержать гладкие нормали
+\item 2. Реализовать стандартную для glTF модель материала
+\item 3. Реализовать VNDF-семплинг и добавить его к MIS
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Советы}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Внимательно перепечатывайте формулы, любая неточность приведёт к неправильному результату
+\item Во многих местах могут появиться бесконечности и NaN'ы -- проверьте, что вы всегда вычисляете функции \mintinline{cpp}|sqrt| и \mintinline{cpp}|pow| от неотрицательных величин (проще всего добавить в их аргумент \mintinline{cpp}|max(0, ...)|)
+\item Сначала тестируйте на больших значениях roughness, а уже потом на близких к нулю
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Примеры сцены}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice7_1.gltf}{\texttt{slides/tree/trunk/example\_scenes/practice7\_1.gltf}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice7_2.gltf}{\texttt{slides/tree/trunk/example\_scenes/practice7\_2.gltf}}
+\href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/practice7_3.gltf}{\texttt{slides/tree/trunk/example\_scenes/practice7\_3.gltf}}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №1}
+\slideimage{practice7_1.png}
+\begin{center}1024 spp, 3 min\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №2}
+\slideimage{practice7_2.png}
+\begin{center}1024 spp, 6.5 min\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №3}
+\slideimage{practice7_3.png}
+\begin{center}1024 spp, 7 min\end{center}
+\end{frame}
+
+\end{document}
