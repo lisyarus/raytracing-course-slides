@@ -1,6 +1,6 @@
 % (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
 
-\documentclass[10pt]{beamer}
+\documentclass[handout,10pt]{beamer}
 
 \usepackage[T2A]{fontenc}
 \usepackage[russian]{babel}
@@ -375,7 +375,7 @@ normal = normalize(normal)
 \item Environment maps почти всегда хранятся в HDR формате, т.е. их пиксели не ограничены диапазоном \begin{math}[0,1]\end{math}, и почти всегда используют географическую проекцию:
 \begin{minted}[bgcolor=lightbg]{cpp}
 texcoord.x = 0.5 + 0.5 * atan2(dir.z, dir.x) / pi
-texcoord.y = 0.5 - 0.5 * asin(dir.y)
+texcoord.y = 0.5 - asin(dir.y) / pi
 \end{minted}
 \pause
 \item Можно использовать environment map как значение `фона', если луч не пересёк никакую другую геометрию

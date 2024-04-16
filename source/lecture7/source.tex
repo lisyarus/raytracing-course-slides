@@ -1,6 +1,6 @@
 % (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
 
-\documentclass[10pt]{beamer}
+\documentclass[handout,10pt]{beamer}
 
 \usepackage[T2A]{fontenc}
 \usepackage[russian]{babel}
@@ -488,11 +488,11 @@ N = \frac{N'}{\|N'\|}
 \begin{itemize}
 \item Микрофасетная модель, предполагающая, что микрофасеты -- идеальные зеркала
 \pause
-\begin{equation*}f(L,V) = \frac{D(H)\cdot G(L,V,H)\cdot F(L, H)}{4 \cdot (L\cdot N)\cdot(V\cdot N)}\end{equation*}
+\begin{equation*}f(L,V) = \frac{D(H)\cdot G(L,V)\cdot F(L, H)}{4 \cdot (L\cdot N)\cdot(V\cdot N)}\end{equation*}
 \pause
 \item \begin{math}D(H)\end{math} -- \textit{distribution term}: какой процент нормалей микрофасетов ориентированы в сторону \begin{math}H\end{math}
 \pause
-\item \begin{math}G(L,V,H)\end{math} -- \textit{geometry term}: насколько соседние микрофасеты мешают свету прийти от источника к поверхности (\textit{shadowing}) или от поверхности к наблюдателю (\textit{masking})
+\item \begin{math}G(L,V)\end{math} -- \textit{geometry term}: насколько соседние микрофасеты мешают свету прийти от источника к поверхности (\textit{shadowing}) или от поверхности к наблюдателю (\textit{masking})
 \pause
 \item \begin{math}F(L,H)\end{math} -- \textit{fresnel term}: коэффициент отражения Френеля
 \pause
@@ -504,7 +504,7 @@ N = \frac{N'}{\|N'\|}
 \frametitle{Beckmann distribution}
 \usemintedstyle{solarized-light}
 \begin{equation*}
-D(H) = \frac{\exp\left(-\frac{\tan\theta_H}{\alpha^2}\right)}{\pi\alpha^2\cos^4\theta_H}
+D(H) = \frac{\exp\left(-\frac{\tan^2\theta_H}{\alpha^2}\right)}{\pi\alpha^2\cos^4\theta_H}
 \end{equation*}
 \begin{itemize}
 \item \begin{math}\theta_H = \angle(H,N)\end{math}
@@ -528,12 +528,12 @@ D(H) = \frac{\alpha^2\chi^+(H\cdot N)}{\pi\left((\alpha^2-1)(H\cdot N)^2 + 1\rig
 \frametitle{Smith's geometry term}
 \usemintedstyle{solarized-light}
 \begin{gather*}
-G_1(H,X) = \frac{1}{1 + \lambda(A)} \\
-G = G_1(H,L) \cdot G_1(H,V) \\
-G' = \frac{1}{1 + G_1(H,L) + G_1(H,V)}
+G_1(N,X) = \frac{1}{1 + \lambda(A)} \\
+G = G_1(N,L) \cdot G_1(N,V) \\
+G' = \frac{1}{1 + G_1(N,L) + G_1(N,V)}
 \end{gather*}
 \begin{itemize}
-\item \begin{math}A = \frac{H\cdot X}{\alpha \sqrt{1 - (H\cdot X)^2}}\end{math}
+\item \begin{math}A = \frac{(N\cdot X)\cdot\chi^+(N\cdot X)}{\alpha \sqrt{1 - (N\cdot X)^2}}\end{math}
 \item \begin{math}\lambda(A)\end{math} зависит от конкретного распределения нормалей \begin{math}D\end{math}
 \item \begin{math}G'\end{math} -- \textit{height-correlated} geometry term: утверждается, что такая формула более точно описывает masking и shadowing
 \end{itemize}
