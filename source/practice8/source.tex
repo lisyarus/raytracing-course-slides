@@ -1,0 +1,94 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt,handout]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Практика 8}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Описание практики}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item В этой практике нужно поддержать четыре типа текстур:
+\begin{itemize}
+\item 1. Base color texture
+\item 2. Normal texture
+\item 3. Metallic roughness texture
+\item 4. Emissive texture
+\end{itemize}
+\item Environment maps не требуются, но их очень легко поддержать, и они помогут в тестировании
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Примеры сцены}
+\begin{itemize}
+\item \href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/sphere/sphere.gltf}{\texttt{example\_scenes/sphere/sphere.gltf}}
+\item \href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/sphere/sphere_metallic.gltf}{\texttt{example\_scenes/sphere/sphere\_metallic.gltf}}
+\item \href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/sphere/sphere_roughness.gltf}{\texttt{example\_scenes/sphere/sphere\_roughness.gltf}}
+\item \href{https://github.com/lisyarus/raytracing-course-slides/tree/trunk/example_scenes/sphere/sphere_emissive.gltf}{\texttt{example\_scenes/sphere/sphere\_emissive.gltf}}
+\item \alert{\textbf{N.B.}}: Первые три сцены не содержат источника света; для их тестирования лучше как-нибудь добавить environment map :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №1}
+\slideimage{sphere-specular.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №2}
+\slideimage{sphere-metallic.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №3}
+\slideimage{sphere-roughness.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Пример сцены №4}
+\slideimage{sphere-emissive.png}
+\end{frame}
+
+\end{document}

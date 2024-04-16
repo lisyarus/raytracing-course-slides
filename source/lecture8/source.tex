@@ -1,0 +1,559 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\definecolor{lightbg}{RGB}{253,246,227}
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
+\subtitle{Лекция 8: Текстуры, environment maps, GPU raytracing}
+\date{2024}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Зачем нужны текстуры?}
+\begin{itemize}
+\item Дешевле детализация -- добавление геометрии не бесплатное
+\pause
+\item Возможность интерполировать параметры материала между вершинами
+\pause
+\item Отделение геометрии от детализации удобнее художникам
+\pause
+\item Можно поддержать environment maps
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Какие бывают текстуры?}
+\begin{itemize}
+\item Любой параметр, влияющий на BRDF в точке, можно записать в текстуру:
+\pause
+\begin{itemize}
+\item Цвет
+\pause
+\item Вектор нормали (\textit{normal mapping})
+\pause
+\item Параметры материала, e.g. metallic и roughness (\textit{material mapping})
+\pause
+\item Цвет излучения
+\end{itemize}
+\pause
+\item Environment map -- текстура `окружения' сцены
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Normal mapping}
+\slideimage{sphere_normal.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Normal mapping}
+\slideimage{sphere-specular.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Normal mapping}
+\slideimage{sphere-metallic.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Material mapping}
+\slideimage{sphere_material.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Material mapping}
+\slideimage{sphere-roughness.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Emission texture}
+\slideimage{sphere_emission.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Emission texture}
+\slideimage{sphere-emissive.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Как текстуры описываются в glTF?}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Текстуры описаны в массиве \mintinline{cpp}|textures|
+\pause
+\item Материал может ссылаться (по индексу) на текстуры для различных параметров:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|material.normalTexture|
+\item \mintinline{cpp}|material.occlusionTexture|
+\item \mintinline{cpp}|material.emissiveTexture|
+\item \mintinline{cpp}|material.pbrMetallicRoughness.baseColorTexture|
+\item \mintinline{cpp}|material.pbrMetallicRoughness.metallicRoughnessTexture|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Как текстуры описываются в glTF?}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Сама текстура ссылается на два других объекта:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|texture.source| -- индекс объекта в массиве \mintinline{cpp}|images|, описывающего расположение пикселей текстуры
+\pause
+\item \mintinline{cpp}|texture.sampler| -- индекс объекта в массиве \mintinline{cpp}|samplers|, описывающего параметры чтения пикселей текстуры
+\end{itemize}
+\pause
+\item \mintinline{cpp}|texture.source| может ссылаться на файл, на URL, на buffer view, etc -- мы будем поддерживать только файлы
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{glTF sampler}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Sampler описывает типичные настройки текстуры при realtime рендеринге:
+\pause
+\begin{itemize}
+\item Minification и magnification фильтры
+\pause
+\item Wrapping modes (repeat, mirrored repeat, etc)
+\end{itemize}
+\pause
+\item В path tracing'е разделение на min и mag фильтры не имеет большого смысла
+\pause
+\item Мы будем использовать \underline{всегда} LINEAR фильтр и REPEAT wrapping mode
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Wrapping modes}
+\slideimage{wrapping.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Текстурные координаты}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для обращения к текстуре нам нужно знать соответствие вершин модели точкам на изображении, т.е. знать \textit{текстурные координаты}
+\pause
+\item Они заданы так же, как другие атрибуты вершин
+\pause
+\item glTF поддерживает несколько разных атрибутов текстурных координат, использующихся для разных текстур
+\pause
+\item Мы будем поддерживать только один такой атрибут: \mintinline{cpp}|TEXCOORD_0|
+\pause
+\item Будем считать, что это всегда \mintinline{cpp}|VEC2| floating-point
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат текстур}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item glTF чётко описывает, как должны интерпретироваться пиксели различных текстур:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|baseColorTexture| хранится в sRGB-формате, т.е. при чтении её пиксели нужно возвести в степень \begin{math}2.2\end{math}
+\pause
+\item \mintinline{cpp}|emissiveTexture| хранится в sRGB-формате
+\pause
+\item \mintinline{cpp}|metallicRoughnessTexture| хранится в линейном формате, где зелёный канал это roughness, а синий -- metallic
+\pause
+\item \mintinline{cpp}|normalTexture| хранится в линейном формате, с преобразованием \begin{math}[-1,1]\rightarrow[0,1]\end{math}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Формат текстур}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Если какая-то текстура не задана, она считается полностью белой
+|pause
+\item \mintinline{cpp}|baseColorFactor|, \mintinline{cpp}|emissiveFactor|, \mintinline{cpp}|roughnessFactor| и \mintinline{cpp}|metallicFactor| понимаются как \textit{коэффициенты}, на которые домножается значение из текстуры (после преобразования из sRGB и интерполяции)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Семплинг текстуры}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Удобно из функции пересечения луча с треугольником вернуть также проинтерполированные текстурные координаты
+\pause
+\item Удобно завести отдельную функцию, возвращающую цвет из текстуры по текстурным координатам
+\pause
+\item Сначала нужно произвести \textit{wrapping}: фактически, взять каждую координату по модулю 1 (учтите, что они могут быть отрицательными!)
+\pause
+\item После текстурные координаты нужно перевести из диапазона \begin{math}[0,1]\times [0,1]\end{math} в диапазон \begin{math}[0,\text{width}]\times[0,\text{height}]\end{math}
+\pause
+\item По координате \mintinline{cpp}|tx| можно вычислить координаты двух соседних пикселей \mintinline{cpp}|ix = floor(tx)| и \mintinline{cpp}|ix + 1|, и коэффициент интерполяции между ними \mintinline{cpp}|dx = tx - floor(tx)|
+\pause
+\item Аналогично по Y
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Семплинг текстуры}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Мы получили координаты четырёх соседних пикселей (\mintinline{cpp}|ix + 1| нужно брать по модулю \mintinline{cpp}|width|, и аналогично для Y)
+\pause
+\item Читаем четыре значения пикселей, переводим из байтов \begin{math}[0,255]\end{math} в нормированные единицы \begin{math}[0,1]\end{math}
+\pause
+\item Если наша текстура -- sRGB, возводим их покомпонентно в степень \begin{math}2.2\end{math} (альфа-компоненту возводить не нужно)
+\pause
+\item Делаем билинейную интерполяцию полученных значений с коэффициентами \mintinline{cpp}|dx,dy|
+\pause
+\item Полученное значение и будет семплом нашей текстуры
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Base color texture}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для поддержки baseColorTexture (\textit{альбедо}) достаточно заменить цвет в вычислении BRDF с \mintinline{cpp}|baseColorFactor| на \mintinline{cpp}|baseColorFactor * sample(baseColorTexture, texcoord).rgb|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Emissive texture}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для поддержки emissiveTexture достаточно заменить цвет излучения с \mintinline{cpp}|emissiveFactor| на \mintinline{cpp}|emissiveFactor * sample(emissiveTexture, texcoord).rgb|
+\pause
+\item Не забудьте, что мы поддерживаем расширение \mintinline{cpp}|KHR_materials_emissive_strength|, которое даёт дополнительныый множитель для \mintinline{cpp}|emissiveFactor|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Metallic roughness texture}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для поддержки metallicRoughnessTexture нужно:
+\pause
+\begin{itemize}
+\item Получить семпл текстуры \mintinline{cpp}|sample = sample(metallicRoughnessTexture, texcoord).rgb|
+\pause
+\item Вычислить roughness как \mintinline{cpp}|roughnessFactor * sample.g|
+\pause
+\item Вычислить metallic как \mintinline{cpp}|metallicFactor * sample.b|
+\pause
+\item Использовать их в рассчётах BRDF
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Normal texture}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Normal texture -- самая неприятная
+\pause
+\item Нормали из этой текстуры задаются в локальной системе координат поверхности, ось Z которой совпадает с shading normal, а ось X -- с \textit{tangent} вектором
+\pause
+\item Tangent тоже задан как атрибут вершин \mintinline{cpp}|TANGENT|, мы будем считать, что он всегда \mintinline{cpp}|VEC4| floating-point
+\pause
+\item Первые три координаты \mintinline{cpp}|TANGENT| задают координаты локальной оси X в системе координат объекта
+\pause
+\item Четвёртая координата \mintinline{cpp}|TANGENT| равна 1, если локальная система координат -- правая, или -1, если левая
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Normal texture}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Tangent вектор нужно преобразовывать в мировую систему координат так же, как координаты самих вершин
+\pause
+\item Четвёртую координату при этом нужно оставить как есть!
+\pause
+\item Зная normal и tangent, локальную систему координат можно восстановить как
+\begin{minted}[bgcolor=lightbg]{cpp}
+local_X = tangent.xyz
+local_Z = normal
+local_Y = cross(local_Z, local_X) * tangent.w
+\end{minted}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Normal texture}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Значение из normalTexture нужно перевести в диапазон \begin{math}[-1,1]\end{math} и перевести из локальной системы координат в глобальную
+\begin{minted}[bgcolor=lightbg]{cpp}
+sample = sample(normalTexture, texcoord)
+local_normal = sample * 2.0 - vec3(1.0)
+normal = local_X * local_normal.x
+       + local_Y * local_normal.y
+       + local_Z * local_normal.z
+normal = normalize(normal)
+\end{minted}
+\pause
+\item Эту нормаль нужно использовать, как \textit{shading normal}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Sponza без текстур}
+\slideimage{sponza-white.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Sponza, только альбедо}
+\slideimage{sponza-textured-albedo-only.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Sponza, все текстуры}
+\slideimage{sponza-textured-full.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Комната}
+\slideimage{room.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Šibenik cathedral}
+\slideimage{sibenik-day.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Šibenik cathedral}
+\slideimage{sibenik-night.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Environment maps}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item glTF не поддерживает environment maps, только с помощью довольно сложного расширения \mintinline{cpp}|EXT_lights_image_based|
+\pause
+\item Environment maps очень удобны для визуализации сцен, в которых нет собственных источников света
+\pause
+\item Environment maps почти всегда хранятся в HDR формате, т.е. их пиксели не ограничены диапазоном \begin{math}[0,1]\end{math}, и почти всегда используют географическую проекцию:
+\begin{minted}[bgcolor=lightbg]{cpp}
+texcoord.x = 0.5 + 0.5 * atan2(dir.z, dir.x) / pi
+texcoord.y = 0.5 - 0.5 * asin(dir.y)
+\end{minted}
+\pause
+\item Можно использовать environment map как значение `фона', если луч не пересёк никакую другую геометрию
+\pause
+\item На сайте \href{https://hdri-haven.com}{\texttt{hdri-haven.com}} можно скачать очень много HDR environment maps
+\pause
+\item \textbf{\alert{N.B.}}: Значения в HDR бывают \textbf{очень} большими (например, \begin{math}10^6\end{math}), что может привести к артефактам при рендеринге
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{GPU raytracing}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Используемый нами алгоритм -- Unidirectional Monte-Carlo Path Tracing -- относится к категории \textit{massively parallel}
+\pause
+\item Логично попробовать его портировать на GPU!
+\pause
+\item Например, нарисуем полноэкранный прямоугольник, и фрагментный шейдер будет для каждого пикселя вычислять его цвет, усредняя запрошенное количество семплов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{GPU raytracing}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item На GPU мы столкнёмся с некоторыми проблемами:
+\pause
+\begin{itemize}
+\item Много семплов генерировать дорого -- драйвер может решить, что GPU зависла, и перезапустить её, убив нашу программу
+\pause
+\item Нужно как-то передать информацию о сцене на GPU
+\pause
+\item Языки шейдеров довольно примитивные -- придётся отказаться от иерархий классов в пользу индексов, битовых полей, и т.п.
+\pause
+\item Основные компоненты нашего алгоритма -- обход BVH и сам path tracing -- рекурсивные, что тоже не поддерживается шейдерами
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Генерация семплов}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Проблему с зависанием проще всего решить, рисуя по одному семплу за раз, и усредняя их встроенным blending'ом
+\pause
+\item На шаге N мы хотим взять уже записанное усреднённое значение с коэффициентом \begin{math}\frac{N-1}{N}\end{math} и новый семпл с коэффициентом \begin{math}\frac{1}{N}\end{math} -- это и будет значение альфа-канала для блендинга
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Информация о сцене}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Все современные графические API поддерживают передачу больших буферов на GPU
+\pause
+\item Например, в OpenGL это можно сделать через SSBO (shader storage buffer object), или через buffer textures
+\pause
+\item В Vulkan это storage buffers
+\pause
+\item В DirectX это structured buffers
+\pause
+\item И т.п.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Рекурсия}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Рекурсию в обходе BVH легко заменить на локальный стек небольшого размера (напр. 64)
+\pause
+\item При спуске в дочерние вершины мы делаем одну из них текущей вершиной, а вторую кладём в стек
+\pause
+\item Когда текущая вершина обработана, достаём вершину из стека
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Рекурсия}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Рекурсию в самом алгоритме path tracing'а легко заменить на цикл
+\pause
+\item В конце одного шага path tracing'а код всегда выглядит как-то так:
+\begin{minted}[bgcolor=lightbg]{cpp}
+return emission + brdf * ray_color(new_ray)
+\end{minted}
+\pause
+\item Нам достаточно запоминать суммарное количество излучения уже посещённых объектов, и множитель, на который нужно домножить следующий луч
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Рекурсия}
+\usemintedstyle{solarized-light}
+\begin{minted}[bgcolor=lightbg]{cpp}
+result = vec3(0.0)
+factor = vec3(1.0)
+
+for (bounce in [0..max))
+    ...
+    result += emission * factor
+    factor *= brdf
+    ray = reflected_ray
+
+return result;
+\end{minted}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Mega kernel}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Такой подход называется \textit{mega kernel}: один большой шейдер делаёт всё
+\pause
+\item Так мы уже получим рабочий path tracer, но его производительность будет не очень хорошей из-за \textit{divergence}
+\pause
+\item \textit{Divergence} -- ситуация, когда вычислительные ядра одного варпа (warp) GPU выполняют сильно отличающийся код / обращаются к очень разным данным / etc
+\pause
+\item Самая важная оптимизация GPU path tracing'а -- уменьшить divergence
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Divergence}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Изначально каждый варп обрабатывает блок нескольких соседних пикселей
+\pause
+\item Что приводит к divergence?
+\pause
+\begin{itemize}
+\item Какие-то лучи ушли в фон, а какие-то ещё нет
+\pause
+\item Обход BVH для разных лучей затронул разные части дерева
+\pause
+\item Разные лучи пересекли объекты с разными материалами и обращаются к разным текстурам
+\pause
+\item И т.п.
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Wavefront path tracing}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Один способ бороться с divergence -- разбить mega kernel на много небольших кусочков
+\pause
+\begin{itemize}
+\item Ray generation -- генерирует луч для каждого пикселя и записывает их в большой буфер
+\pause
+\item Intersection -- вычисляет пересечения лучей со сценой
+\pause
+\item Material evaluation -- обрабатывает пересечения, генерирует новые лучи
+\pause
+\item И т.п.
+\end{itemize}
+\pause
+\item Такой подход называется \textit{wavefront path tracing}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Wavefront path tracing}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Много возможностей оптимизации:
+\pause
+\begin{itemize}
+\item Как-нибудь отсортировать лучи перед шагом intersection, чтобы близкие в буфере лучи затрагивали близкие части BVH
+\pause
+\item Отсортировать пересечения по ID материала, чтобы близкие вызовы material evaluation обращались к одной и той же памяти
+\pause
+\item И т.п.
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\end{document}
