@@ -147,8 +147,7 @@
             },
             "name" : "kamen_zid",
             "normalTexture" : {
-                "index" : 0,
-                "scale" : 0
+                "index" : 0
             },
             "pbrMetallicRoughness" : {
                 "baseColorTexture" : {
@@ -237,8 +236,7 @@
             },
             "name" : "pod_rub",
             "normalTexture" : {
-                "index" : 5,
-                "scale" : 0
+                "index" : 5
             },
             "pbrMetallicRoughness" : {
                 "baseColorTexture" : {
@@ -264,8 +262,7 @@
             },
             "name" : "kamen_zid_prozor",
             "normalTexture" : {
-                "index" : 7,
-                "scale" : 0
+                "index" : 7
             },
             "pbrMetallicRoughness" : {
                 "baseColorTexture" : {
@@ -291,8 +288,7 @@
             },
             "name" : "zid_vani",
             "normalTexture" : {
-                "index" : 9,
-                "scale" : 0
+                "index" : 9
             },
             "pbrMetallicRoughness" : {
                 "baseColorTexture" : {
