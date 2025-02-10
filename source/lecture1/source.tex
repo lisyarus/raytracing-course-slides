@@ -1,6 +1,6 @@
 % (c) Nikita Lisitsa, lisyarus@gmail.com, 2024
 
-\documentclass[10pt,handout]{beamer}
+\documentclass[10pt]{beamer}
 
 \usepackage[T2A]{fontenc}
 \usepackage[russian]{babel}
@@ -80,14 +80,11 @@
 \frametitle{Баллы}
 \begin{itemize}
 \pause
-\item \textbf{Все баллы} получаются за практические задания
+\item \textbf{Основные баллы} получаются за практические задания
 \pause
-\begin{itemize}
-\item \textbf{до 9 баллов} -- 1ая практика
-\item \textbf{до 10 баллов} -- 2ая практика
-\item \begin{math}\dots\end{math}
-\item \textbf{до 16 баллов} -- 8ая практика
-\end{itemize}
+\item Каждая из 8-ми практик -- \textbf{до 12 баллов}
+\pause
+\item Можно выложить проект на гитлаб как портфолио и приложить красивый скриншот в Readme, за это ещё \textbf{4 балла}
 \pause
 \item В сумме -- \textbf{100 баллов}
 \end{itemize}
@@ -96,11 +93,10 @@
 \begin{frame}
 \frametitle{Баллы}
 \begin{itemize}
-\item Дедлайн для практик -- 1 неделя, т.е. 23:59 следующего понедельника
+\item Дедлайн для практик -- 2 недели, 23:59 среды
 \pause
 \begin{itemize}
 \item На 1ую практику дедлайн -- 3 недели
-\item На 2ую практику дедлайн -- 2 недели
 \end{itemize}
 \pause
 \item При сдаче после дедлайна баллы делятся \textbf{пополам} (с округлением в большую сторону)
@@ -129,7 +125,7 @@
 \begin{itemize}
 \item Каждая практика -- программа, по описанию входной сцены генерирующая картинку (\textit{`рендер'})
 \pause
-\item Автотестированием занимается телеграм-бот \texttt{mkn-raytracing-2024-bot}
+\item Автотестированием занимается телеграм-бот \texttt{mkn-raytracing-2025-bot} (бот начнёт работать после первой практики)
 \pause
 \item Он запускает вашу программу на 5 \textit{случайных} сценах и сравнивает картинку с референсом
 \pause
@@ -142,9 +138,10 @@
 \begin{itemize}
 \item Можно использовать \textit{любой язык программирования} (если он не поддерживается -- напишите мне, я постараюсь его добавить)
 \pause
-\item \alert{\textbf{N.B.}}: Наши программы будут довольно медленными, так что лучше выбрать язык пошустрее
+\item Наши программы будут довольно \textit{требовательными к производительности}, так что лучше выбрать язык пошустрее
 \pause
 \item Нам нужно будет
+\pause
 \begin{itemize}
 \item Читать и писать в текстовые и бинарные файлы
 \pause
@@ -154,6 +151,8 @@
 \pause
 \item Оперировать древовидными структурами данных
 \end{itemize}
+\pause
+\item Хорошие варианты: C, C++, Rust, и т.п.
 \end{itemize}
 \end{frame}
 
@@ -167,7 +166,7 @@
   [ path-inside-repo [ branch ] ]
 \end{minted}
 \pause
-\item Можно делать все задания в одном репозитории или в разных, как хотите
+\item Лучше делать все задания в одном репозитории, так как они основываются друг на друге
 \pause
 \item В репозитории по указанному пути должны быть скрипты \texttt{build.sh} и \texttt{run.sh}:
 \begin{itemize}
@@ -232,25 +231,24 @@ cmake --build .
 \frametitle{Примерный план курса}
 \pause
 \begin{itemize}
-\item \textbf{Лекции 1-3: Whitted-style raytracing}
+\item \textbf{Лекции 1-2: Whitted-style raytracing}
 \begin{itemize}
-\item Трассировка лучей без решения уравнения рендеринга
+\item Простая трассировка лучей
+\item Без решения уравнения рендеринга
 \end{itemize}
 \pause
-\item \textbf{Лекции 4-6: Monte-Carlo pathtracing}
+\item \textbf{Лекции 3-5: Monte-Carlo pathtracing}
 \begin{itemize}
-\item Теория распространения света
-\item Модели материалов
+\item Теория распространения света и модели материалов
 \item Решение уравнение рендеринга
 \item Оптимизация
 \end{itemize}
 \pause
-\item \textbf{Лекции 7-8: Красивые картинки}
+\item \textbf{Лекции 6-8: Красивые картинки}
 \begin{itemize}
 \item Формат сцен glTF
 \item Physically-based материалы
-\item Тестуры
-\item Material mapping
+\item Тестуры, material mapping, environment mapping
 \end{itemize}
 \end{itemize}
 \end{frame}
@@ -625,21 +623,21 @@ cmake --build .
 \frametitle{Трассировка лучей}
 Общий план рисования сцены трассировкой лучей:
 \pause
-\begin{itemize}
-\item 1. Описать сцену: форму объектов и их материал (напр. цвет)
+\begin{enumerate}
+\item Описать сцену: форму объектов и их материал (напр. цвет)
 \pause
-\item 2. Описать камеру: где она находится, куда смотрит
+\item Описать камеру: где она находится, куда смотрит
 \pause
-\item 3. Задать размеры изображения
+\item Задать размеры изображения
 \pause
-\item 4. Для каждого пикселя изображения, построить луч из камеры в этот пиксель
+\item Для каждого пикселя изображения, построить луч из камеры в этот пиксель
 \pause
-\item 5. Найти ближайшее пересечение луча с объектами сцены
+\item Найти ближайшее пересечение луча с объектами сцены
 \pause
-\item 6. В качестве цвета пикселя взять цвет объекта пересечения
+\item В качестве цвета пикселя взять цвет объекта пересечения
 \pause
-\item 7. Сохранить полученную картинку
-\end{itemize}
+\item Сохранить полученную картинку
+\end{enumerate}
 \end{frame}
 
 \begin{frame}
@@ -647,7 +645,7 @@ cmake --build .
 \begin{itemize}
 \item Поначалу мы будем использовать максимально простой формат сцен, описанный в слайдах практики
 \pause
-\item Ближе к концу курса перейдём к более серьёзному формату, скорее всего -- \texttt{glTF}
+\item Ближе к концу курса перейдём к более серьёзному формату -- \texttt{glTF}
 \end{itemize}
 \end{frame}
 
@@ -774,7 +772,7 @@ cmake --build .
 \item \begin{math}P_Y \mapsto \left(2 \frac{P_Y}{H} - 1\right) \cdot \tan\left({fov_Y\over 2}\right)\end{math}
 \end{itemize}
 \pause
-\item \alert{\textbf{N.B.:}} Вместо точки \begin{math}(P_X, P_Y)\end{math}, соответствующей углу пикселя, лучше брать его центр \begin{math}(P_X + 0.5, P_Y + 0.5)\end{math}
+\item Вместо точки \begin{math}(P_X, P_Y)\end{math}, соответствующей углу пикселя, лучше брать его центр \begin{math}(P_X + 0.5, P_Y + 0.5)\end{math}
 \item \alert{\textbf{N.B.:}} Обычно форматы изображений хранят пиксели сверху-вниз, и картинка получится перевёрнутой; проще всего это исправить, домножив формулу для Y на -1
 \end{itemize}
 \end{frame}
@@ -791,7 +789,7 @@ D = X\cdot\operatorname{right}+Y\cdot\operatorname{up}+Z\cdot\operatorname{forwa
 \pause
 \item Это и есть финальный вектор направления для нашего луча
 \pause
-\item \alert{\textbf{N.B.:}} Обычно вектор направления считают нормированным -- это упрощает некоторые вычисления, но может усложнить другие; вы можете сделать так, как вам кажется удобнее
+\item Обычно векторы направлений делают нормированными -- это упрощает очень многие вычисления, и лучше всегда придерживаться этого правила
 \end{itemize}
 \end{frame}
 
@@ -814,8 +812,6 @@ D = X\cdot\operatorname{right}+Y\cdot\operatorname{up}+Z\cdot\operatorname{forwa
 \item Точки \begin{math}P = (X,Y,Z)\end{math} луча удобно параметризовать параметром \begin{math}t \in [0, \infty)\end{math} как \begin{math}P = O + t \cdot D\end{math}
 \pause
 \item Позже мы будем использовать настоящие трёхмерные модели из треугольников, а пока ограничимся простыми геометрическими фигурами: плоскостью, эллипсоидом, параллелепипедом
-\pause
-\item \alert{\textbf{N.B.:}} Пока будем считать, что все объекты находятся в начале координат
 \end{itemize}
 \end{frame}
 
@@ -824,7 +820,7 @@ D = X\cdot\operatorname{right}+Y\cdot\operatorname{up}+Z\cdot\operatorname{forwa
 \begin{itemize}
 \item Плоскость удобно описывать вектором нормали и точкой, через которую проходит плоскость
 \pause
-\item Мы договорились, что все объекты находятся в начале координат, так что нам достаточно вектора нормали \begin{math}N = (N_X, N_Y, N_Z)\end{math}
+\item Для простоты пока будем считать, что все объекты находятся в начале координат, так что нам достаточно вектора нормали \begin{math}N = (N_X, N_Y, N_Z)\end{math}
 \pause
 \item Уравнение такой плоскости: \begin{math}P\cdot N = X\cdot N_X+Y\cdot N_Y+Z\cdot N_Z=0\end{math}
 \pause
@@ -1031,7 +1027,7 @@ X \mapsto (V, W) \cdot (X, 0) \cdot (-V, W)
 \item Тогда алгоритм для преобразования луча такой:
 \pause
 \begin{itemize}
-\item Вычтем \begin{math}T\end{math} из точки начала луча, и повернёт результат на сопряжённый кватернион \begin{math}\overline{Q}\end{math}
+\item Вычтем \begin{math}T\end{math} из точки начала луча, и повернём результат на сопряжённый кватернион \begin{math}\overline{Q}\end{math}
 \pause
 \item Повернём вектор направления луча на сопряжённый кватернион \begin{math}\overline{Q}\end{math}
 \end{itemize}
@@ -1043,7 +1039,7 @@ X \mapsto (V, W) \cdot (X, 0) \cdot (-V, W)
 \begin{frame}
 \frametitle{Вычисление пересечения луча и сцены}
 \begin{itemize}
-\item Проходим по всем объектам сцены, находим пересечение луча с ними
+\item Проходим по всем объектам сцены, находим пересечение луча с ними (не забывая переводить луч в систему координат объекта)
 \pause
 \item Из всех объектов, пересекших луч, находим ближайшее к камере пересечение, т.е. с минимальным значением \begin{math}t\end{math}
 \pause
