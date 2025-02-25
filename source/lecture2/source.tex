@@ -430,6 +430,48 @@ A^{T}N' = N \quad\Longrightarrow\quad N' = (A^T)^{-1} N
 \end{frame}
 
 \begin{frame}[fragile]
+\frametitle{Нормаль при произвольном преобразовании}
+\begin{itemize}
+\item Обращение матрицы преобразования плохо работает, если масштабирование сильно неизотропное, или вообще равно нулю по одной из осей (матрица вырождается)
+\pause
+\item Мы знаем формулу для обратной матрицы через опеределитель \begin{math}\det A\end{math} и присоединённую матрицу (транспонированную матрицу алгебраических дополнений) \begin{math}\operatorname{adj} A = (\operatorname{cof} A)^T\end{math}:
+\begin{equation*}
+M^{-1} = \frac{1}{\det M}\operatorname{adj} M
+\end{equation*}
+\pause
+\item Применим к нашей формуле преобразования нормалей, подставив \begin{math}M = A^T\end{math}:
+\begin{equation*}
+A^{-T} = \frac{1}{\det {A^T}}(\operatorname{adj} A)^T = \frac{1}{\det A}\operatorname{cof} A
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль при произвольном преобразовании}
+\begin{itemize}
+\item Применим к нашей формуле преобразования нормалей, подставив \begin{math}M = A^T\end{math}:
+\begin{equation*}
+A^{-T} = \frac{1}{\det {A^T}}(\operatorname{adj} A)^T = \frac{1}{\det A}\operatorname{cof} A
+\end{equation*}
+\pause
+\item Определитель можно опустить -- это просто скаляр, который всё равно сократится, когда мы отнормируем вектор нормали
+\pause
+\item Остаётся просто матрица алгебраических дополнений \begin{math}\operatorname{cof} A\end{math} -- она лучше себя ведёт при вырожденных преобразованиях, и её вычисление требует меньше операций
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Нормаль при произвольном преобразовании}
+\begin{itemize}
+\item На самом деле, нормали -- это не векторы, а \textit{бивекторы}, т.е. элементы внешнего квадрата \begin{math}\bigwedge^2 \mathbb R^3\end{math} нашего пространства
+\pause
+\item То, что в 3D нормали можно отождествить с векторами, это следствие т.н. \textit{изоморфизма Ходжа} и числового факта \begin{math}\dim \bigwedge^2 \mathbb R^3 = \binom{3}{2} = 3 = \dim \mathbb R^3\end{math}
+\pause
+\item Под действием преобразования \begin{math}A\end{math} исходного пространства \textit{бивекторы} преобразуются посредством оператора \begin{math}\bigwedge^2 A\end{math} -- это и есть инвариантное определение матрицы алгебраических дополнений
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
 \frametitle{Нормаль: внутри или снаружи}
 \begin{itemize}
 \item Описанные формулы для нормалей всегда дают \textit{внешнюю нормаль} к объекту, т.е. смотрящую наружу объекта
