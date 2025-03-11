@@ -848,6 +848,46 @@ F_Y^{-1}(x) = -\frac{1}{\lambda}\ln(1-x)
 \end{frame}
 
 \begin{frame}[fragile]
+\frametitle{Rejection sampling: круг}
+\slideimage{rejection-sampling-circle.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Rejection sampling}
+\begin{itemize}
+\item Иногда термином \textit{rejection sampling} называют другой похожий способ генерации случайных распределений
+\pause
+\item Пусть \begin{math}X\end{math} -- случайная величина на отрезке \begin{math}[a,b]\end{math} с плотностью вероятности \begin{math}p(x)\end{math}
+\pause
+\item Пусть мы знаем некую верхнюю границу плотности вероятности \begin{math}p(x) \leq C\end{math}
+\pause
+\item Сгенерируем случайную точку \begin{math}(x,y)\end{math} в прямоугольнике \begin{math}[a,b]\times [0,C]\end{math} (равномерным распределением по каждой координате)
+\pause
+\item Если \begin{math}y \leq p(x)\end{math}, принимаем значение \begin{math}X_i = x\end{math} в качестве нового семпла, иначе генерируем новый семпл
+\pause
+\item Фактически, это тот же rejection sampling, но применённый к графику плотности вероятности
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Rejection sampling}
+\begin{itemize}
+\item В более общем случае, пусть мы умеем генерировать семплы распределения \begin{math}q(x)\end{math}, и знаем оценку \begin{math}p(x) \leq C\cdot q(x)\end{math}
+\pause
+\item Сгенерируем случайный семпл \begin{math}x\end{math} используя распределение \begin{math}q(x)\end{math}
+\pause
+\item Сгенерируем равномерное число в отрезке \begin{math}u \in [0, C\cdot q(x)]\end{math}
+\pause
+\item Если \begin{math}u \leq p(x)\end{math}, принимаем \begin{math}x\end{math} в качестве семпла
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Rejection sampling графика плотности}
+\slideimage{rejection-sampling-graph.png}
+\end{frame}
+
+\begin{frame}[fragile]
 \frametitle{Преобразование распределения}
 \begin{itemize}
 \item Пусть у нас есть некоторая одномерная случайная величина \begin{math}X\end{math} с распределением вероятности \begin{math}p_X(x)\end{math}
