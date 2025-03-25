@@ -4,6 +4,7 @@
 
 \usepackage[T2A]{fontenc}
 \usepackage[russian]{babel}
+\usepackage[utf8]{inputenc}
 \usepackage{minted}
 
 \usepackage{graphicx}
@@ -36,7 +37,7 @@
 \makeatother
 
 \title{Фотореалистичный рендеринг\quad\quad\quad\quad\quad\quad \textit{(aka raytracing)}}
-\subtitle{Лекция 4: Variance reduction, importance sampling, cosine-weighted sampling, light surface sampling, multiple importance sampling}
+\subtitle{Лекция 4: Variance reduction, importance sampling, cosine-weighted sampling, direct light sampling, multiple importance sampling}
 \date{2024}
 
 \setbeamertemplate{footline}[frame number]
@@ -48,9 +49,9 @@
 \begin{frame}
 \frametitle{Об оптимизации рендеринга}
 \begin{itemize}
-\item Мы видели, что Монте-Карло интегрирование занимает очень много времени, если мы хотим получить качественную картинку
+\item Монте-Карло интегрирование занимает очень много времени, если мы хотим получить качественную картинку (сходимость \(\frac{1}{\sqrt N}\))
 \pause
-\item Хочется научиться оптимизировать процесс
+\item Хочется научиться оптимизировать этот процесс
 \pause
 \item Оптимизировать = получить картинку более высокого качества за то же время
 \pause
@@ -71,6 +72,8 @@
 \pause
 \item Мы используем рандомизированный алгоритм, цвет луча -- случайная величина
 \pause
+\item Мат.ожидание этой величины -- искомое значение цвета пикселя (\textit{unbiased estimator})
+\pause
 \item Близость цвета луча к искомому цвету определяется дисперсией этой величины
 \pause
 \item \begin{math}\Longrightarrow\end{math} Надо уменьшать дисперсию!
@@ -90,7 +93,7 @@ I = \int\limits_\Omega f(x)dx \approx \frac{1}{N} \sum \frac{f(X_i)}{p(X_i)}
 \item Вычислим дисперсию одного семпла:
 \begin{gather*}
 \operatorname{Var}\frac{f(X)}{p(X)} = \mathbb{E}\left[\frac{f(X)^2}{p(X)^2}\right] - \mathbb{E}\left[\frac{f(X)}{p(X)}\right]^2 = \\
-= \int\limits_\Omega \frac{f(x)^2}{p(x)^2}p(x)dx - I^2 = \int\limits_\Omega \frac{f(x)^2}{p(x)}dx - I^2
+= \int\limits_\Omega \frac{f(x)^2}{p(x)^2}p(x)dx - I^2 = \int\limits_\Omega \frac{f(x)^2}{p(x)}dx - \int\limits_\Omega I\cdot f(x)dx
 \end{gather*}
 \end{itemize}
 \end{frame}
@@ -100,42 +103,32 @@ I = \int\limits_\Omega f(x)dx \approx \frac{1}{N} \sum \frac{f(X_i)}{p(X_i)}
 \begin{itemize}
 \item Вычислим дисперсию одного семпла:
 \begin{equation*}
-\operatorname{Var}\frac{f(X)}{p(X)} = \int\limits_\Omega \frac{f(x)^2}{p(x)}dx - I^2
+\operatorname{Var}\frac{f(X)}{p(X)} = \int\limits_\Omega \frac{f(x)^2}{p(x)}dx - \int\limits_\Omega I\cdot f(x)dx = \int\limits_\Omega I\cdot f(x)\cdot\left(\frac{f(x)}{I\cdot p(x)} - 1\right)dx
 \end{equation*}
 \pause
-\item Можно показать (напр. вариационным методом), что дисперсия минимизируется если
-\begin{equation*}
-p^*(x) \sim |f(x)| \Longrightarrow p^*(x) = \frac{|f(x)|}{\int |f(x)|dx}
-\end{equation*}
-\pause
-\item \begin{math}\Longrightarrow\end{math} Поиск идеального распределения семплов сводится к интегрированию \begin{math}\pm\end{math} той же функции
-\end{itemize}
-\end{frame}
-
-\begin{frame}
-\frametitle{Variance reduction}
-\begin{itemize}
-\item В частности, если \begin{math}f\geq 0\end{math}, то 
+\item Видно, что дисперсия будет равна нулю, если
 \begin{equation*}
 p^*(x) = \frac{f(x)}{\int f(x)dx} = \frac{f(x)}{I}
 \end{equation*}
 \pause
-\item Тогда любой семпл даст точное значение интеграла:
+\item \begin{math}\Longrightarrow\end{math} Поиск идеального распределения семплов сводится к интегрированию \textit{той же функции}!
+\pause
+\item При этом любой семпл сразу даёт точное значение интеграла:
 \begin{equation*}
 \frac{f(x)}{p^*(x)} = f(x) \cdot \left[\frac{f(x)}{I}\right]^{-1} = I
 \end{equation*}
-\pause
-\item При этом дисперсия равна нулю:
-\begin{gather*}
-\operatorname{Var}\frac{f(X)}{p^*(X)} = \int\limits_\Omega \frac{f(x)^2}{p^*(x)}dx - I^2 = \int\limits_\Omega I\cdot f(x)dx - I^2 = I^2 - I^2 = 0
-\end{gather*}
 \end{itemize}
 \end{frame}
 
 \begin{frame}
 \frametitle{Variance reduction}
 \begin{itemize}
-\item \alert{\textbf{N.B.}}: Если \begin{math}f\end{math} бывает как положительна, так и отрицательна, то даже с идеальным распределением \begin{math}p^*\end{math} дисперсия будет отличаться от нуля:
+\item \alert{\textbf{N.B.}}: Если \begin{math}f\end{math} бывает как положительна, так и отрицательна, то идеальное распределение находится по формуле
+\begin{equation*}
+p^*(x) = \frac{|f(x)|}{\int |f(x)|dx}
+\end{equation*}
+\pause
+\item В этом случае дисперсия всегда будет больше нуля:
 \begin{gather*}
 \operatorname{Var}\frac{f(X)}{p^*(X)} = \int\limits_\Omega \frac{f(x)^2}{|f(x)|}\cdot I_{abs} dx - I^2 = I_{abs}^2 - I^2 \\
 I_{abs} = \int\limits_\Omega |f(x)|dx
@@ -148,7 +141,7 @@ I_{abs} = \int\limits_\Omega |f(x)|dx
 \begin{itemize}
 \item Итак, идеальное распределение для Монте-Карло интегрирования пропорционально искомой функции
 \pause
-\item Вычисление такого распределения сводится к искомому интегралу, и само по себе нам не помогает
+\item Вычисление такого распределения сводится к искомому интегралу, и само по себе \textit{бесполезно}
 \pause
 \item Мысль: давайте брать распределение, в какой-то мере \textit{повторяющее форму} нашей искомой функции
 \pause
@@ -182,6 +175,39 @@ I_{abs} = \int\limits_\Omega |f(x)|dx
 \end{gather*}
 \pause
 \item \begin{math}\Longrightarrow\end{math} Чем ближе носитель распределения к носителю функции, тем меньше дисперсия
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling: оценка variance reduction}
+\begin{itemize}
+\item Пусть \(p^*(x)\) -- идеальное распределение для интегрирования неотрицательной функции \(f(x)\), и \(p(x)\) -- выбранное нами распределение
+\pause
+\item Представим \(p(x)\) как
+\begin{equation*}
+p(x) = p^*(x)\cdot (1+\varepsilon(x))
+\end{equation*}
+\pause
+\item Тогда дисперсия одного семпла равна
+\begin{equation*}
+\operatorname{Var}\frac{f(X)}{p(X)} = I^2 \int\limits_\Omega p^*(x) \frac{\varepsilon(x)^2}{1+\varepsilon(x)}dx
+\end{equation*}
+\pause
+\item Если \(\varepsilon(x) \sim 0\), то и дисперсия близка к нулю
+\pause
+\item Если для каких-то значений \(x\) \(\quad p(x) \ll p^*(x)\), то \(\varepsilon(x) \sim -1\), и дисперсия сильно растёт из-за \(1+\varepsilon(x)\) в знаменателе
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Importance sampling: оценка variance reduction}
+\begin{itemize}
+\item Тогда дисперсия одного семпла равна
+\begin{equation*}
+\operatorname{Var}\frac{f(X)}{p(X)} = I^2 \int\limits_\Omega p^*(x) \frac{\varepsilon(x)^2}{1+\varepsilon(x)}dx
+\end{equation*}
+\pause
+\item Общее правило: лучше взять \(p(x)\) побольше там, где \(p^*(x)\) побольше :)
 \end{itemize}
 \end{frame}
 
@@ -360,9 +386,9 @@ E + C \cdot L_{in}(\omega)
 \pause
 \item В искомой интегрируемой функции есть ещё один множитель: входящее количество света \begin{math}L_{in}(\omega_i)\end{math}
 \pause
-\item К сожалению, явный вид этой функции безумно сложен и зависит от всей сцены
+\item К сожалению, явный вид этой функции безумно сложен и зависит от геометрии и материалов всей сцены
 \pause
-\item ...но мы может попробовать какие-нибудь эвристики!
+\item ...но мы можем попробовать какие-нибудь эвристики!
 \end{itemize}
 \end{frame}
 
@@ -570,21 +596,6 @@ p(R_XN_X,R_YN_Y,R_ZN_Z) = \frac{1}{4\pi\sqrt{N_X^2R_Y^2R_Z^2 + R_X^2N_Y^2R_Z^2 +
 \end{frame}
 
 \begin{frame}
-\frametitle{Распределение на эллипсоиде}
-\begin{itemize}
-\item Преобразование площади:
-\begin{gather*}
-\det J_F \cdot \|J_F^{-T} \cdot N\| = \sqrt{N_X^2R_Y^2R_Z^2 + R_X^2N_Y^2R_Z^2 + R_X^2R_Y^2N_Z^2}
-\end{gather*}
-\pause
-\item Итого плотность точки на эллипсоиде, полученной из равномерного распределения на единичной сфере:
-\begin{gather*}
-p(R_XN_X,R_YN_Y,R_ZN_Z) = \frac{1}{4\pi\sqrt{N_X^2R_Y^2R_Z^2 + R_X^2N_Y^2R_Z^2 + R_X^2R_Y^2N_Z^2}}
-\end{gather*}
-\end{itemize}
-\end{frame}
-
-\begin{frame}
 \frametitle{Распределение направлений}
 \begin{itemize}
 \item Мы научились генерировать точки на поверхности источника света и вычислять их плотность вероятности
@@ -593,7 +604,7 @@ p(R_XN_X,R_YN_Y,R_ZN_Z) = \frac{1}{4\pi\sqrt{N_X^2R_Y^2R_Z^2 + R_X^2N_Y^2R_Z^2 +
 \pause
 \item Само направление получить просто: это нормированный вектор из освещаемой точки в случайную точку на поверхности источника света
 \pause
-\item Вопрос в том, как получить плотность вероятности
+\item Вопрос в том, как получить плотность вероятности \textit{вектора направления}, зная плотность вероятности \textit{точки поверхности}
 \end{itemize}
 \end{frame}
 
@@ -619,6 +630,8 @@ L_{out}(x, \omega_o) = L_e(x, \omega_o) + \int\limits_y f(x,\omega_i,\omega_o) \
 \pause
 \item \begin{math}y\end{math} -- точка, из которой свет идёт в освещаемую точку
 \pause
+\item Интеграл берётся по всем точкам \(y\) всех поверхностей
+\pause
 \item \begin{math}\omega_i = \frac{y-x}{\|y-x\|}\end{math} -- направление из \begin{math}x\end{math} в \begin{math}y\end{math}
 \pause
 \item \begin{math}V(x,y)\end{math} -- \textit{visibility term}: 1, если луч из \begin{math}x\end{math} в \begin{math}y\end{math} ничем не заблокирован, иначе 0
@@ -632,7 +645,7 @@ L_{out}(x, \omega_o) = L_e(x, \omega_o) + \int\limits_y f(x,\omega_i,\omega_o) \
 \begin{frame}
 \frametitle{Распределение направлений}
 \begin{itemize}
-\item От этого уравнения нам нужен только множитель \begin{math}\frac{|\cos\theta_y|}{\|x-y\|^2}\end{math}: он описывает то, какой телесный угол в точке \begin{math}x\end{math} соответствует элементу площади некой поверхности вокруг в точке \begin{math}y\end{math}
+\item От этого уравнения нам нужен только множитель \begin{math}\frac{|\cos\theta_y|}{\|x-y\|^2}\end{math}: он описывает то, какой телесный угол в точке \begin{math}x\end{math} соответствует элементу площади некой поверхности в точке \begin{math}y\end{math}
 \pause
 \item Плотность вероятности меняется \textit{обратно пропорционально} изменению площади
 \pause
@@ -660,7 +673,7 @@ p(\omega) = p(y) \cdot \frac{\|x-y\|^2}{|\omega \cdot n_y|} \\
 \end{frame}
 
 \begin{frame}
-\frametitle{Light surface sampling: алгоритм}
+\frametitle{Direct light sampling: алгоритм}
 \begin{itemize}
 \item Итак, если мы хотим в Монте-Карло интегрировании сэмплить некоторый источник света, нужно:
 \pause
@@ -679,15 +692,21 @@ p(\omega) = p(y) \cdot \frac{\|x-y\|^2}{|\omega \cdot n_y|} \\
 \end{frame}
 
 \begin{frame}
-\frametitle{Light surface sampling}
-\begin{itemize}
-\item \textbf{\alert{N.B.}}: Использовать \textit{только} семплинг источника света не получится -- картинка будет неправильной, так как распределение направлений не покрывает носитель интегрируемой функции
-\end{itemize}
+\frametitle{Direct light sampling}
+\slideimage{only_light_1024.png}
 \end{frame}
 
 \begin{frame}
-\frametitle{Light surface sampling}
-\slideimage{only_light_1024.png}
+\frametitle{Direct light sampling}
+\begin{itemize}
+\item При использовании \textit{только} семплинга источников света шум значительно уменьшается
+\pause
+\item При этом картинка получается \textit{неправильной}, почему?
+\pause
+\item Мы никогда не семплим направления не на источник света, но из этих направлений может прийти непрямое (отражённое) освещение
+\pause
+\item Формальнее, распределение направлений не покрывает носитель интегрируемой функции, т.е. нарушается требование Монте-Карло интегрирования: \(f(x) \neq 0 \Longrightarrow p(x) \neq 0\)
+\end{itemize}
 \end{frame}
 
 \begin{frame}
@@ -698,7 +717,7 @@ p(\omega) = p(y) \cdot \frac{\|x-y\|^2}{|\omega \cdot n_y|} \\
 \begin{itemize}
 \item Cosine-weighted распределение идеально подходит для диффузной поверхности
 \pause
-\item Light surface sampling направляет лучи в сторону источников света и полезно, когда источники маленькие или далеко
+\item Direct light sampling направляет лучи в сторону источников света и полезно, когда источники маленькие или далеко, но не работает само по себе
 \end{itemize}
 \pause
 \item Хотелось бы их как-то скомбинировать!
@@ -710,13 +729,78 @@ p(\omega) = p(y) \cdot \frac{\|x-y\|^2}{|\omega \cdot n_y|} \\
 \begin{frame}
 \frametitle{Multiple importance sampling (MIS)}
 \begin{itemize}
-\item Есть много способов комбинировать распределения, подробнее смотри в статье \href{https://cseweb.ucsd.edu/~viscomp/classes/cse168/sp21/readings/veach.pdf}{\texttt{Veach, Guibas - Optimally Combining Sampling Techniques for Monte Carlo Rendering (1995)}}
+\item Есть много способов комбинировать распределения, подробнее смотри
+\begin{itemize}
+\item \href{https://cseweb.ucsd.edu/~viscomp/classes/cse168/sp21/readings/veach.pdf}{\texttt{Veach, Guibas - Optimally Combining Sampling Techniques for Monte Carlo Rendering (1995)}}
+\item \href{https://graphics.stanford.edu/papers/veach_thesis/thesis.pdf}{\texttt{Veach'97 (PhD thesis)}, Chapter 9}
+\item \href{https://link.springer.com/chapter/10.1007/978-1-4842-7185-8_20}{\texttt{Статья в GPU Gems II}}
+\item \href{https://lisyarus.github.io/blog/posts/multiple-importance-sampling.html}{\texttt{Моя статья про MIS}}
+\end{itemize}
 \pause
-\item Мы будем использовать простую эвристику: аффинную комбинацию распределений
+\item Мы будем использовать простую эвристику: аффинную комбинацию нескольких распределений
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Multiple importance sampling (MIS)}
+\begin{itemize}
+\item Пусть у нас есть набор стратегий (распределений) \(p_i(x)\), и выполняется условие 
+\begin{equation*}
+f(x) \neq 0 \Longrightarrow \exists i:\, p_i(x)\neq 0
+\end{equation*}
 \pause
+\item Словами: для любой точки носителя функции есть хотя бы одно распределение, которое может её сгенерировать
+\pause
+\item Тогда распределение \(p(x) = \sum c_ip_i(x)\), где \(c_i\) -- некоторые ненулевые веса \(\sum c_i = 1\), удовлетворяет требованиям Монте-Карло интегрирования
+\pause
+\item В терминах статьи Veach'а это \textit{single-sample estimator with balance heuristic} (секция 9.2.4) -- гарантированно неплохой способ комбинировать стратегии семплинга
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Multiple importance sampling (MIS): алгоритм}
+\begin{itemize}
+\item Алгоритм:
+\pause
+\begin{itemize}
+\item 1. Выбираем стратегию \(i\) используя веса \(c_i\)
+\pause
+\item 2. Генерируем семпл с помощью стратегии \(p_i(x)\)
+\pause
+\item 3. Вычисляем полную вероятность \(p(x)\) семпла как взвешенную сумму всех стратегий, т.е. вычисляем вероятность того, что семпл мог быть сгенерирован \textit{любой стратегией!}
+\pause
+\item 4. Используем семпл в интегрировании
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Multiple importance sampling (MIS)}
+\begin{itemize}
+\item Если для всех стратегий выполняется \(f(x) \neq 0 \Longrightarrow p_i(x) \neq 0\), т.е. каждая стратегия работает сама по себе, то можно сделать проще:
+\pause
+\begin{itemize}
+\item 1. Выбираем стратегию \(i\) используя веса \(c_i\)
+\pause
+\item 2. Генерируем семпл с помощью стратегии \(p_i(x)\)
+\pause
+\item 3. Используем этот семпл в интегрировании, с вероятностью \(p_i(x)\), т.е. игнорируя остальные стратегии
+\end{itemize}
+\pause
+\item Такая версия MIS \textbf{не работает} для direct light sampling!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Multiple importance sampling (MIS)}
+\begin{itemize}
+\item В нашем случае мы возьмём простую комбинацию двух распределений:
+\pause
+\begin{itemize}
 \item С вероятностью 50\% возьмём cosine-weighted распределение
 \pause
 \item С вероятностью 50\% возьмём случайный источник света и случайный семпл на нём
+\end{itemize}
 \end{itemize}
 \end{frame}
 
@@ -730,7 +814,7 @@ p(\omega) = p(y) \cdot \frac{\|x-y\|^2}{|\omega \cdot n_y|} \\
 p(\omega) = \frac{1}{2}p_{\cos}(\omega) + \frac{1}{2N}\sum p_i(\omega)
 \end{gather*}
 \pause
-\item В итоге мы сгенерируем семпл направления одним из выбранных распределений, но для Монте-Карло интегрирования нам нужна его вероятность, поэтому нам всё равно нужно вычислить вероятность этого семпла для \textit{всех распределений}, а не только того, которым он сгенерирован!
+\item В итоге мы сгенерируем семпл направления одним из выбранных распределений, но для Монте-Карло интегрирования нам нужна его \textit{полная} вероятность, поэтому нам всё равно нужно вычислить вероятность этого семпла для \textit{всех распределений}, а не только того, которым он сгенерирован!
 \end{itemize}
 \end{frame}
 
@@ -769,6 +853,52 @@ E + \frac{C}{\pi} \cdot L_{in}(\omega) \cdot (\omega \cdot n) \cdot \frac{1}{p(\
 \begin{frame}
 \frametitle{Uniform vs cosine vs MIS: 1024 семпла}
 \slideimage{mis_1024.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Stratification}
+\begin{itemize}
+\item Есть другие способы улучшать сходимость Монте-Карло интегрирования, например -- \textit{stratification}
+\pause
+\item Разобьём область интегрирования на непересекающиеся области: \(\Omega = \bigsqcup \Omega_i\), и на каждой выберем своё распределение \(p_i\)
+\pause
+\item Тогда интеграл разбивается в сумму интегралов
+\begin{equation*}
+\int\limits_\Omega f(x)dx = \sum \int\limits_{\Omega_i} f(x)dx
+\end{equation*}
+\pause
+\item Сгенерируем по одному семплу \(X_i\in\Omega_i\) \textit{в каждой области}, и оцениваем интеграл как
+\begin{equation*}
+\sum \frac{f(X_i)}{p_i(X_i)}
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Stratification}
+\begin{itemize}
+\item Дисперсия в таком случае:
+\begin{equation*}
+\operatorname{Var}\sum \frac{f(X_i)}{p_i(X_i)} = \sum \operatorname{Var}\frac{f(X)}{p_i(X)}
+\end{equation*}
+\pause
+\item \(\Longrightarrow\) Метод подходит, если мы знаем хорошие стратегии для каждой области по отдельности
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Next event estimation (NEE)}
+\begin{itemize}
+\item Есть другие способы делать direct light sampling в рамках path tracing'а, например -- \textit{next event estimation}
+\pause
+\item Что-то в духе стратификации: разобьём весь приходящий свет на \textit{прямой} (т.е. излучённый источниками света) и \textit{непрямой} (т.е. отражённый хотя бы один раз)
+\pause
+\item При вычислении интеграла бросаем дополнительный (нерекурсивный) луч в сторону источника света для учёта прямого освещения, и генерируем луч cosine-weighted распределением (в обшем случае -- распределением, подходящим для материала) для рекурсивного луча
+\pause
+\item Работает очень хорошо, но сильно усложняет код (приходится учитывать ситуации, когда луч в источник света не попал в источник света, рекурсивный луч непрямого освещения попал в источник света, и т.п.), особенно с учётом отражений/преломлений
+\pause
+\item Подробнее смотри \href{https://www.cg.tuwien.ac.at/sites/default/files/course/4411/attachments/08_next\%20event\%20estimation.pdf}{\texttt{эту презентацию}}
+\end{itemize}
 \end{frame}
 
 \end{document}
